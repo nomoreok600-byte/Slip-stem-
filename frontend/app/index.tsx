@@ -9,6 +9,7 @@ import { useSound } from "@/src/audio";
 import { DailyChallengeCard } from "@/src/components/daily-challenge";
 import { CoinIcon, PlayerBike } from "@/src/components/sprites";
 import { NeonButton } from "@/src/components/ui";
+import { bikeById } from "@/src/game/constants";
 import { useBikeSpec, useGame } from "@/src/game/store";
 import { makeStyles, useTheme } from "@/src/theme";
 
@@ -22,6 +23,8 @@ export default function Home() {
   const { state } = useGame();
   const spec = useBikeSpec();
   const sound = useSound();
+  const cos = state.cosmetics;
+  const bike = bikeById(cos.selectedBike);
 
   useEffect(() => {
     sound.startMusic();
@@ -33,6 +36,7 @@ export default function Home() {
   );
 
   const bob = useRef(new Animated.Value(0)).current;
+  const [spin, setSpin] = useState(0);
   useEffect(() => {
     Animated.loop(
       Animated.sequence([
@@ -40,10 +44,12 @@ export default function Home() {
         Animated.timing(bob, { toValue: 0, duration: 900, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
       ]),
     ).start();
+    const t = setInterval(() => setSpin((s) => (s + 24) % 360), 55);
+    return () => clearInterval(t);
   }, [bob]);
   const bikeY = bob.interpolate({ inputRange: [0, 1], outputRange: [0, -10] });
 
-  const go = (path: "/run" | "/garage" | "/prestige") => {
+  const go = (path: "/run" | "/garage" | "/prestige" | "/shop" | "/leaderboard") => {
     sound.play("click");
     router.push(path);
   };
@@ -87,8 +93,18 @@ export default function Home() {
         {/* hero bike on the road */}
         <View style={styles.stage}>
           <Animated.View style={{ transform: [{ translateY: bikeY }] }}>
-            <PlayerBike size={96} />
+            <PlayerBike
+              size={104}
+              spin={spin}
+              model={cos.selectedBike}
+              bikeColor={cos.bikeColor}
+              helmetColor={cos.helmetColor}
+              outfitColor={cos.outfitColor}
+            />
           </Animated.View>
+          <Pressable testID="home-bike-name" onPress={() => go("/shop")} style={styles.bikeNamePill}>
+            <Text style={styles.bikeNameText}>{bike.name}  ›</Text>
+          </Pressable>
         </View>
 
         {/* stat chips */}
@@ -115,9 +131,21 @@ export default function Home() {
             ) : null}
           </Pressable>
           <View style={{ width: 12 }} />
+          <Pressable testID="home-shop-button" onPress={() => go("/shop")} style={[styles.navCard, { backgroundColor: colors.brandTertiary }]}>
+            <Text style={styles.navTitle}>Shop</Text>
+            <Text style={styles.navSub}>Bikes & looks</Text>
+          </Pressable>
+        </View>
+        <View style={{ height: 12 }} />
+        <View style={styles.row}>
           <Pressable testID="home-prestige-button" onPress={() => go("/prestige")} style={styles.navCard}>
             <Text style={styles.navTitle}>Syndicate</Text>
             <Text style={styles.navSub}>Upgrades</Text>
+          </Pressable>
+          <View style={{ width: 12 }} />
+          <Pressable testID="home-leaderboard-button" onPress={() => go("/leaderboard")} style={styles.navCard}>
+            <Text style={styles.navTitle}>Ranks</Text>
+            <Text style={styles.navSub}>Top scores</Text>
           </Pressable>
         </View>
       </ScrollView>
@@ -194,7 +222,18 @@ const useStyles = makeStyles((colors) => ({
     marginTop: 2,
   },
   subtitle: { color: "#FFFFFF", fontSize: 14, fontWeight: "900", letterSpacing: 4 },
-  stage: { alignItems: "center", height: 130, justifyContent: "center", marginTop: 6 },
+  stage: { alignItems: "center", height: 168, justifyContent: "center", marginTop: 6 },
+  bikeNamePill: {
+    marginTop: 8,
+    backgroundColor: colors.surfaceSecondary,
+    borderRadius: 14,
+    borderWidth: 3,
+    borderColor: OUTLINE,
+    borderBottomWidth: 5,
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+  },
+  bikeNameText: { color: colors.onSurface, fontWeight: "900", fontSize: 14, letterSpacing: 0.5 },
   statsRow: { flexDirection: "row", gap: 10, marginTop: 4, marginBottom: 12 },
   statChip: {
     flex: 1,

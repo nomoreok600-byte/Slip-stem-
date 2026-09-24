@@ -34,6 +34,8 @@ export type GameState = {
   daily: Daily;
   upgrades: Upgrades;
   stats: Stats;
+  cosmetics: Cosmetics;
+  leaderboard: LeaderboardEntry[];
 };
 
 export type DailyGoalType = "score" | "distance" | "crates" | "runs";
@@ -77,4 +79,48 @@ export type RunModifiers = {
   turbo: boolean;
   scoreMult: number;
   rainGrip: number; // 0..1, higher = more grip
+};
+
+// ---------- Cosmetics / shop ----------
+export type BikeModel = "street" | "sport" | "cruiser" | "chopper" | "neon" | "moto";
+
+export type BikeDef = {
+  id: BikeModel;
+  name: string;
+  cost: number; // coins
+  color: string; // default paint
+  speed: number; // stat bonus (display points)
+  handling: number;
+  braking: number;
+  desc: string;
+};
+
+export type CharacterDef = {
+  id: string;
+  name: string;
+  cost: number; // coins
+  skin: string;
+  outfit: string;
+  helmet: string;
+  desc: string;
+};
+
+export type Cosmetics = {
+  ownedBikes: BikeModel[];
+  selectedBike: BikeModel;
+  ownedChars: string[];
+  selectedChar: string;
+  bikeColor: string;
+  helmetColor: string;
+  outfitColor: string;
+};
+
+export type ColorSlot = "bikeColor" | "helmetColor" | "outfitColor";
+
+export type LeaderboardEntry = {
+  id: string;
+  score: number;
+  distance: number;
+  combo: number;
+  date: string; // ISO
 };

@@ -11,8 +11,9 @@ import React, {
 
 import { storage } from "@/src/utils/storage";
 
-import { CRATE_MAX_MS, CRATE_MIN_MS, HIGHER_TIER_MAX, UPGRADE_COST } from "./constants";
+import { CRATE_MAX_MS, CRATE_MIN_MS, HIGHER_TIER_MAX, UPGRADE_COST, bikeById, charById } from "./constants";
 import {
+  addToLeaderboard,
   applyDrop,
   canExport,
   coinsForRun,
@@ -33,7 +34,7 @@ import {
   uid,
   yesterdayKey,
 } from "./logic";
-import type { GameState, RunResult } from "./types";
+import type { BikeModel, ColorSlot, GameState, RunResult } from "./types";
 
 const STORAGE_KEY = "slipstream.save.v1";
 
@@ -49,7 +50,12 @@ type Action =
   | { type: "drop"; from: number; to: number }
   | { type: "refreshGrid" }
   | { type: "export" }
-  | { type: "buy"; key: "grid5" | "scoreMult" | "handling" | "higherTier" };
+  | { type: "buy"; key: "grid5" | "scoreMult" | "handling" | "higherTier" }
+  | { type: "buyBike"; id: BikeModel }
+  | { type: "selectBike"; id: BikeModel }
+  | { type: "buyChar"; id: string }
+  | { type: "selectChar"; id: string }
+  | { type: "setColor"; slot: ColorSlot; hex: string };
 
 const COIN_OPEN_COST = 100;
 
@@ -111,6 +117,7 @@ function reducer(state: GameState, action: Action): GameState {
         coins: state.coins + coinsEarned,
         crates: [...state.crates, ...newCrates],
         daily: { ...d, progress },
+        leaderboard: addToLeaderboard(state.leaderboard ?? [], result),
         stats: {
           ...state.stats,
           bestScore: Math.max(state.stats.bestScore, result.score),
@@ -220,6 +227,68 @@ function reducer(state: GameState, action: Action): GameState {
       return state;
     }
 
+    case "buyBike": {
+      const c = state.cosmetics;
+      if (c.ownedBikes.includes(action.id)) {
+        return { ...state, cosmetics: { ...c, selectedBike: action.id } };
+      }
+      const def = bikeById(action.id);
+      if (state.coins < def.cost) return state;
+      return {
+        ...state,
+        coins: state.coins - def.cost,
+        cosmetics: {
+          ...c,
+          ownedBikes: [...c.ownedBikes, action.id],
+          selectedBike: action.id,
+          bikeColor: def.color,
+        },
+      };
+    }
+
+    case "selectBike": {
+      const c = state.cosmetics;
+      if (!c.ownedBikes.includes(action.id)) return state;
+      return { ...state, cosmetics: { ...c, selectedBike: action.id } };
+    }
+
+    case "buyChar": {
+      const c = state.cosmetics;
+      if (c.ownedChars.includes(action.id)) {
+        const d = charById(action.id);
+        return {
+          ...state,
+          cosmetics: { ...c, selectedChar: action.id, outfitColor: d.outfit, helmetColor: d.helmet },
+        };
+      }
+      const def = charById(action.id);
+      if (state.coins < def.cost) return state;
+      return {
+        ...state,
+        coins: state.coins - def.cost,
+        cosmetics: {
+          ...c,
+          ownedChars: [...c.ownedChars, action.id],
+          selectedChar: action.id,
+          outfitColor: def.outfit,
+          helmetColor: def.helmet,
+        },
+      };
+    }
+
+    case "selectChar": {
+      const c = state.cosmetics;
+      if (!c.ownedChars.includes(action.id)) return state;
+      const d = charById(action.id);
+      return {
+        ...state,
+        cosmetics: { ...c, selectedChar: action.id, outfitColor: d.outfit, helmetColor: d.helmet },
+      };
+    }
+
+    case "setColor":
+      return { ...state, cosmetics: { ...state.cosmetics, [action.slot]: action.hex } };
+
     default:
       return state;
   }
@@ -238,6 +307,11 @@ type GameContextValue = {
   refreshGrid: () => void;
   exportBike: () => void;
   buy: (key: "grid5" | "scoreMult" | "handling" | "higherTier") => void;
+  buyBike: (id: BikeModel) => void;
+  selectBike: (id: BikeModel) => void;
+  buyChar: (id: string) => void;
+  selectChar: (id: string) => void;
+  setColor: (slot: ColorSlot, hex: string) => void;
 };
 
 const GameContext = createContext<GameContextValue | null>(null);
@@ -264,6 +338,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
               daily: parsed.daily ?? base.daily,
               upgrades: { ...base.upgrades, ...(parsed.upgrades ?? {}) },
               stats: { ...base.stats, ...(parsed.stats ?? {}) },
+              cosmetics: { ...base.cosmetics, ...(parsed.cosmetics ?? {}) },
+              leaderboard: parsed.leaderboard ?? [],
             } as GameState;
             dispatch({ type: "hydrate", state: merged });
           }
@@ -300,6 +376,11 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       refreshGrid: () => dispatch({ type: "refreshGrid" }),
       exportBike: () => dispatch({ type: "export" }),
       buy: (key) => dispatch({ type: "buy", key }),
+      buyBike: (id) => dispatch({ type: "buyBike", id }),
+      selectBike: (id) => dispatch({ type: "selectBike", id }),
+      buyChar: (id) => dispatch({ type: "buyChar", id }),
+      selectChar: (id) => dispatch({ type: "selectChar", id }),
+      setColor: (slot, hex) => dispatch({ type: "setColor", slot, hex }),
     }),
     [state, ready],
   );

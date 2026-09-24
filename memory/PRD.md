@@ -79,3 +79,27 @@ provided by user.
 ## Notes
 - Real Google ads require Publish → native build; not visible in Expo Go/web.
 - GitHub push is done via the "Save to GitHub" button (agent cannot push).
+
+## Bikes, Riders, Paint, Leaderboard + polish (2026-06 session 2)
+- **Cosmetics system** (`src/game/constants.ts` BIKES/CHARACTERS/color palettes,
+  `types.ts` Cosmetics + LeaderboardEntry, `logic.ts`, `store.tsx` buyBike/
+  selectBike/buyChar/selectChar/setColor). Coins buy bikes/riders; bikes give
+  cosmetic + stat bonuses (speed/handling/braking) folded into deriveSpec/
+  deriveModifiers. Syndicate Tokens remain for permanent upgrades.
+- **Shop screen** (`app/shop.tsx`): 3 tabs — Bikes, Rider, Paint. Live rider
+  preview, buy/USE/selected states, stat tags, paint swatches (bike/helmet/outfit)
+  applied instantly.
+- **Leaderboard** (`app/leaderboard.tsx`): local top-10 scores recorded each run,
+  personal-best card, ranked rows.
+- **Sprites overhaul** (`src/components/sprites.tsx`): customizable PlayerBike
+  (model/colors/skin), spinning wheels (SpinWheel/Hubcap via `transform` rotate),
+  crashed "KO" pose (dead=true, X-eyes + dizzy stars), boost flames; Car/Truck
+  spinning hubcaps.
+- **Run** (`app/run.tsx`): rider rendered with chosen cosmetics + live wheel spin;
+  on crash the dead rider is shown on the road ~0.95s before the summary; "NEW
+  BEST!" badge when beating best.
+- **Home** (`app/index.tsx`): shows selected bike (bob + spin) with name pill →
+  Shop; added Shop + Ranks nav cards.
+- **Loading screen**: spinning badge wheel.
+- **Audio**: richer synthesized SFX + fuller synthwave loop (`scripts/gen_audio.py`).
+

@@ -1,4 +1,4 @@
-import { FAMILIES, MAX_LEVEL } from "./constants";
+import { bikeById, DEFAULT_COSMETICS, FAMILIES, LEADERBOARD_MAX, MAX_LEVEL } from "./constants";
 import type {
   BikeSpec,
   Cell,
@@ -7,8 +7,10 @@ import type {
   DailyGoalType,
   Family,
   GameState,
+  LeaderboardEntry,
   Part,
   RunModifiers,
+  RunResult,
   Upgrades,
 } from "./types";
 
@@ -53,7 +55,26 @@ export function initialState(): GameState {
       bestDistance: 0,
       exports: 0,
     },
+    cosmetics: { ...DEFAULT_COSMETICS, ownedBikes: ["street"], ownedChars: ["rookie"] },
+    leaderboard: [],
   };
+}
+
+// ---------- Leaderboard ----------
+export function addToLeaderboard(
+  board: LeaderboardEntry[],
+  result: RunResult,
+): LeaderboardEntry[] {
+  const entry: LeaderboardEntry = {
+    id: uid("lb"),
+    score: result.score,
+    distance: result.distance,
+    combo: result.bestCombo,
+    date: new Date().toISOString(),
+  };
+  return [...board, entry]
+    .sort((a, b) => b.score - a.score)
+    .slice(0, LEADERBOARD_MAX);
 }
 
 // ---------- Daily challenge ----------
@@ -241,11 +262,12 @@ export function deriveSpec(state: GameState): BikeSpec {
   const hasABS = maxBrake >= 4;
   const turbo = adjacentTurbo(grid, gridSize);
 
-  const speed = Math.min(100, Math.round((enginePts / 96) * 100));
-  const braking = Math.min(100, Math.round((brakePts / 96) * 100));
+  const bike = bikeById(state.cosmetics?.selectedBike);
+  const speed = Math.min(100, Math.round((enginePts / 96) * 100) + bike.speed);
+  const braking = Math.min(100, Math.round((brakePts / 96) * 100) + bike.braking);
   const handling = Math.min(
     100,
-    Math.round(((brakePts + aeroPts) / 128) * 100 + state.upgrades.handling * 5),
+    Math.round(((brakePts + aeroPts) / 128) * 100 + state.upgrades.handling * 5) + bike.handling,
   );
 
   return {
@@ -265,10 +287,12 @@ export function deriveSpec(state: GameState): BikeSpec {
 
 export function deriveModifiers(state: GameState): RunModifiers {
   const spec = deriveSpec(state);
-  const speedMult = 1 + Math.min(spec.enginePts / 96, 0.5);
-  const handling = 1 + Math.min(spec.brakePts / 96, 0.35) + 0.05 * state.upgrades.handling;
+  const bike = bikeById(state.cosmetics?.selectedBike);
+  const speedMult = 1 + Math.min(spec.enginePts / 96, 0.5) + bike.speed / 200;
+  const handling =
+    1 + Math.min(spec.brakePts / 96, 0.35) + 0.05 * state.upgrades.handling + bike.handling / 200;
   const scoreMult = 1 + 0.1 * state.upgrades.scoreMult;
-  const rainGrip = spec.hasABS ? 1 : 0.45 + Math.min(spec.brakePts / 128, 0.35);
+  const rainGrip = spec.hasABS ? 1 : 0.45 + Math.min(spec.brakePts / 128, 0.35) + bike.braking / 400;
   return {
     speedMult,
     handling,

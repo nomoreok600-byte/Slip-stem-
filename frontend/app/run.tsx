@@ -15,7 +15,7 @@ import { useSound } from "@/src/audio";
 import { useToast } from "@/src/components/toast";
 import { Car, CoinIcon, CrateIcon, PlayerBike } from "@/src/components/sprites";
 import { NeonButton } from "@/src/components/ui";
-import { ENVIRONMENTS, RUN } from "@/src/game/constants";
+import { ENVIRONMENTS, RUN, bikeById } from "@/src/game/constants";
 import { coinsForRun } from "@/src/game/logic";
 import { useGame, useRunModifiers } from "@/src/game/store";
 import { makeStyles, useTheme } from "@/src/theme";
@@ -51,7 +51,19 @@ export default function RunScreen() {
   const shotRef = useRef<View>(null);
 
   const [phase, setPhase] = useState<Phase>("ready");
+  const [showSummary, setShowSummary] = useState(false);
   const [, setTick] = useState(0);
+
+  const cos = state.cosmetics;
+  const bikeProps = useMemo(
+    () => ({
+      model: cos.selectedBike,
+      bikeColor: cos.bikeColor,
+      helmetColor: cos.helmetColor,
+      outfitColor: cos.outfitColor,
+    }),
+    [cos.selectedBike, cos.bikeColor, cos.helmetColor, cos.outfitColor],
+  );
 
   const roadMargin = Math.round(width * 0.05);
   const roadWidth = width - roadMargin * 2;
@@ -99,6 +111,7 @@ export default function RunScreen() {
     g.lastNearMiss = -999;
     g.secondWindUsed = false;
     g.turboReady = modifiers.turbo;
+    g.prevBest = state.stats.bestScore;
     g.lastTime = 0;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lanes, laneCenterX, modifiers.turbo]);
@@ -158,10 +171,13 @@ export default function RunScreen() {
 
   const onCrash = useCallback(() => {
     g.bestCombo = Math.max(g.bestCombo, g.combo);
+    g.crashX = g.playerX;
     sound.stopEngine();
     sound.play("crash");
     if (Platform.OS !== "web") Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    setShowSummary(false);
     setPhase("crashed");
+    setTimeout(() => setShowSummary(true), 950);
   }, [g, sound]);
 
   const step = useCallback(
@@ -265,6 +281,7 @@ export default function RunScreen() {
 
   const start = useCallback(() => {
     resetGame();
+    setShowSummary(false);
     sound.play("click");
     sound.startEngine();
     setPhase("running");
@@ -365,7 +382,9 @@ export default function RunScreen() {
 
   const env = ENVIRONMENTS[phase === "ready" ? 0 : g.envIndex ?? 0];
   const invincibleNow = phase === "running" && (g.elapsed < g.invincibleUntil || g.boostActive);
+  const wheelSpin = phase === "running" ? Math.round((g.elapsed * 1100) % 360) : 0;
   const coinsEarned = phase === "crashed" ? coinsForRun(Math.round(g.distance), g.cratesCollected) : 0;
+  const isNewBest = phase === "crashed" && Math.round(g.score) > (g.prevBest ?? 0) && Math.round(g.score) > 0;
 
   return (
     <View style={styles.container}>
@@ -412,7 +431,7 @@ export default function RunScreen() {
           {phase === "running" &&
             g.vehicles?.map((v: Vehicle) => (
               <View key={v.id} style={{ position: "absolute", left: laneCenterX(v.lane) - v.w / 2, top: v.y }}>
-                <Car size={v.w} color={v.color} truck={v.truck} />
+                <Car size={v.w} color={v.color} truck={v.truck} spin={wheelSpin} />
               </View>
             ))}
 
@@ -425,7 +444,20 @@ export default function RunScreen() {
                 top: playerY + playerH - playerW * 1.5,
               }}
             >
-              <PlayerBike size={playerW} boosting={invincibleNow} />
+              <PlayerBike size={playerW} boosting={invincibleNow} spin={wheelSpin} {...bikeProps} />
+            </View>
+          )}
+
+          {phase === "crashed" && (
+            <View
+              testID="run-player-dead"
+              style={{
+                position: "absolute",
+                left: (g.crashX ?? laneCenterX(Math.floor(lanes / 2))) - (playerW * 1.15) / 2,
+                top: playerY + playerH - playerW * 1.6,
+              }}
+            >
+              <PlayerBike size={playerW * 1.15} dead {...bikeProps} />
             </View>
           )}
         </View>
@@ -471,12 +503,17 @@ export default function RunScreen() {
         </View>
       )}
 
-      {phase === "crashed" && (
+      {phase === "crashed" && showSummary && (
         <View style={[styles.overlay, { paddingTop: insets.top + 10, paddingBottom: insets.bottom + 10 }]}>
           <View ref={shotRef} collapsable={false} style={styles.summaryCard} testID="run-summary">
             <View style={styles.summaryHeader}>
               <Text style={styles.summaryHeaderText}>WIPEOUT!</Text>
             </View>
+            {isNewBest ? (
+              <View style={styles.newBest} testID="run-new-best">
+                <Text style={styles.newBestText}>★ NEW BEST! ★</Text>
+              </View>
+            ) : null}
             <Text style={styles.bigScore}>{Math.round(g.score).toLocaleString()}</Text>
             <Text style={styles.scoreLabel}>SCORE</Text>
             <View style={styles.summaryStats}>
@@ -597,6 +634,8 @@ const useStyles = makeStyles((colors) => ({
   summaryHeader: { width: "100%", paddingVertical: 12, alignItems: "center", backgroundColor: colors.brandSecondary, borderBottomWidth: 3, borderColor: OUTLINE },
   summaryHeaderText: { color: "#FFFFFF", fontSize: 24, fontWeight: "900", letterSpacing: 2 },
   bigScore: { color: colors.brandPrimary, fontSize: 54, fontWeight: "900", marginTop: 14 },
+  newBest: { backgroundColor: colors.neonGold, borderRadius: 12, borderWidth: 3, borderColor: OUTLINE, paddingHorizontal: 14, paddingVertical: 4, marginTop: 12 },
+  newBestText: { color: colors.onCrate, fontWeight: "900", fontSize: 14, letterSpacing: 1 },
   scoreLabel: { color: colors.muted, fontSize: 12, fontWeight: "900", letterSpacing: 3, marginBottom: 16 },
   summaryStats: { flexDirection: "row", justifyContent: "space-around", width: "100%", paddingHorizontal: 10 },
   coinLine: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 16 },

@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Animated, Easing, Text, View } from "react-native";
 
 import { BikeBadge } from "@/src/components/sprites";
@@ -10,6 +10,7 @@ export function LoadingScreen() {
   const bounce = useRef(new Animated.Value(0)).current;
   const dots = useRef([0, 1, 2].map(() => new Animated.Value(0))).current;
   const stripe = useRef(new Animated.Value(0)).current;
+  const [spin, setSpin] = useState(0);
 
   useEffect(() => {
     Animated.loop(
@@ -30,6 +31,8 @@ export function LoadingScreen() {
     Animated.loop(
       Animated.timing(stripe, { toValue: 1, duration: 700, easing: Easing.linear, useNativeDriver: true }),
     ).start();
+    const t = setInterval(() => setSpin((s) => (s + 30) % 360), 50);
+    return () => clearInterval(t);
   }, [bounce, dots, stripe]);
 
   const translateY = bounce.interpolate({ inputRange: [0, 1], outputRange: [0, -22] });
@@ -45,7 +48,7 @@ export function LoadingScreen() {
       <View style={styles.stage}>
         <Animated.View style={[styles.shadow, { transform: [{ scaleX: scaleShadow }] }]} />
         <Animated.View style={{ transform: [{ translateY }] }}>
-          <BikeBadge size={130} />
+          <BikeBadge size={130} spin={spin} />
         </Animated.View>
       </View>
 
