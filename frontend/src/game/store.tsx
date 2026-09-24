@@ -55,7 +55,8 @@ type Action =
   | { type: "selectBike"; id: BikeModel }
   | { type: "buyChar"; id: string }
   | { type: "selectChar"; id: string }
-  | { type: "setColor"; slot: ColorSlot; hex: string };
+  | { type: "setColor"; slot: ColorSlot; hex: string }
+  | { type: "addCoins"; amount: number };
 
 const COIN_OPEN_COST = 100;
 
@@ -289,6 +290,9 @@ function reducer(state: GameState, action: Action): GameState {
     case "setColor":
       return { ...state, cosmetics: { ...state.cosmetics, [action.slot]: action.hex } };
 
+    case "addCoins":
+      return { ...state, coins: state.coins + Math.max(0, action.amount) };
+
     default:
       return state;
   }
@@ -312,6 +316,7 @@ type GameContextValue = {
   buyChar: (id: string) => void;
   selectChar: (id: string) => void;
   setColor: (slot: ColorSlot, hex: string) => void;
+  addCoins: (amount: number) => void;
 };
 
 const GameContext = createContext<GameContextValue | null>(null);
@@ -381,6 +386,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       buyChar: (id) => dispatch({ type: "buyChar", id }),
       selectChar: (id) => dispatch({ type: "selectChar", id }),
       setColor: (slot, hex) => dispatch({ type: "setColor", slot, hex }),
+      addCoins: (amount) => dispatch({ type: "addCoins", amount }),
     }),
     [state, ready],
   );

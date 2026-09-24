@@ -80,6 +80,20 @@ provided by user.
 - Real Google ads require Publish → native build; not visible in Expo Go/web.
 - GitHub push is done via the "Save to GitHub" button (agent cannot push).
 
+## Top-down redesign + Garage View + Coin Doubler + Trails (2026-06 session 3)
+- **Top-down art**: all vehicles rebuilt as bird's-eye cartoon sprites in
+  `src/components/sprites.tsx` — PlayerBike (helmet/shoulders/handlebars/tank from
+  above, lean on turns, boost flame, KO/dead pose), Car & Truck (roof/windshield/
+  4 corner wheels), moving-tread `Wheel` for a spin illusion, `BikeBadge`.
+- **Rider trails**: premium bikes (chopper/neon/moto) carry a colored speed trail
+  (`BikeDef.trail`) rendered behind the player on the road in `app/run.tsx`.
+- **Bike Garage View** (`app/shop.tsx`): tapping a bike card opens a modal with the
+  bike enlarged and continuously spinning, full bonus bars, trail badge, and a
+  buy/USE/SELECTED action.
+- **Coin Doubler** (`app/run.tsx` + store `addCoins`): crash summary shows a
+  rewarded-ad "DOUBLE COINS" button that adds the run's coins again (once per run).
+- Lean animation on lane changes; wheel-spin driven by elapsed time.
+
 ## Bikes, Riders, Paint, Leaderboard + polish (2026-06 session 2)
 - **Cosmetics system** (`src/game/constants.ts` BIKES/CHARACTERS/color palettes,
   `types.ts` Cosmetics + LeaderboardEntry, `logic.ts`, `store.tsx` buyBike/

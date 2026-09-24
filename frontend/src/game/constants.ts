@@ -76,9 +76,9 @@ export const BIKES: BikeDef[] = [
   { id: "street", name: "Street 250", cost: 0, color: "#2F9BE0", speed: 0, handling: 0, braking: 0, desc: "Reliable starter commuter." },
   { id: "sport", name: "Sport RR", cost: 1200, color: "#FF5A5F", speed: 10, handling: 6, braking: 2, desc: "Lightweight track weapon." },
   { id: "cruiser", name: "Road Cruiser", cost: 2400, color: "#7ED957", speed: 4, handling: 4, braking: 12, desc: "Heavy, planted, unshakeable." },
-  { id: "chopper", name: "Chopper X", cost: 4200, color: "#FF8A3D", speed: 8, handling: 2, braking: 10, desc: "Big-bore boulevard bruiser." },
-  { id: "neon", name: "Neon Blade", cost: 7000, color: "#B06BFF", speed: 14, handling: 10, braking: 4, desc: "Electric hyper-naked." },
-  { id: "moto", name: "Moto GP", cost: 12000, color: "#FFC02E", speed: 18, handling: 14, braking: 8, desc: "Factory prototype racer." },
+  { id: "chopper", name: "Chopper X", cost: 4200, color: "#FF8A3D", speed: 8, handling: 2, braking: 10, desc: "Big-bore boulevard bruiser.", trail: "#FF8A3D" },
+  { id: "neon", name: "Neon Blade", cost: 7000, color: "#B06BFF", speed: 14, handling: 10, braking: 4, desc: "Electric hyper-naked.", trail: "#00E5FF" },
+  { id: "moto", name: "Moto GP", cost: 12000, color: "#FFC02E", speed: 18, handling: 14, braking: 8, desc: "Factory prototype racer.", trail: "#FFC02E" },
 ];
 
 export const CHARACTERS: CharacterDef[] = [

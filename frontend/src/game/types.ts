@@ -93,6 +93,7 @@ export type BikeDef = {
   handling: number;
   braking: number;
   desc: string;
+  trail?: string; // colored speed trail for premium bikes
 };
 
 export type CharacterDef = {

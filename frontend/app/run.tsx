@@ -1,4 +1,5 @@
 import { Image } from "expo-image";
+import { LinearGradient } from "expo-linear-gradient";
 import * as Haptics from "expo-haptics";
 import { useRouter } from "expo-router";
 import * as Sharing from "expo-sharing";
@@ -14,7 +15,7 @@ import { ENV_IMAGE } from "@/src/assets";
 import { useSound } from "@/src/audio";
 import { useToast } from "@/src/components/toast";
 import { Car, CoinIcon, CrateIcon, PlayerBike } from "@/src/components/sprites";
-import { NeonButton } from "@/src/components/ui";
+import { NeonButton, addAlpha } from "@/src/components/ui";
 import { ENVIRONMENTS, RUN, bikeById } from "@/src/game/constants";
 import { coinsForRun } from "@/src/game/logic";
 import { useGame, useRunModifiers } from "@/src/game/store";
@@ -44,6 +45,7 @@ export default function RunScreen() {
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
   const { state, recordRun, clearRunsSinceAd } = useGame();
+  const { addCoins } = useGame();
   const modifiers = useRunModifiers();
   const ads = useAds();
   const toast = useToast();
@@ -52,9 +54,11 @@ export default function RunScreen() {
 
   const [phase, setPhase] = useState<Phase>("ready");
   const [showSummary, setShowSummary] = useState(false);
+  const [coinsDoubled, setCoinsDoubled] = useState(false);
   const [, setTick] = useState(0);
 
   const cos = state.cosmetics;
+  const trailColor = useMemo(() => bikeById(cos.selectedBike).trail, [cos.selectedBike]);
   const bikeProps = useMemo(
     () => ({
       model: cos.selectedBike,
@@ -112,6 +116,7 @@ export default function RunScreen() {
     g.secondWindUsed = false;
     g.turboReady = modifiers.turbo;
     g.prevBest = state.stats.bestScore;
+    g.lean = 0;
     g.lastTime = 0;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lanes, laneCenterX, modifiers.turbo]);
@@ -207,6 +212,7 @@ export default function RunScreen() {
       const targetX = laneCenterX(g.playerLane);
       const laneSpeed = 12 * modifiers.handling;
       g.playerX += (targetX - g.playerX) * Math.min(1, dt * laneSpeed);
+      g.lean = Math.max(-1, Math.min(1, (targetX - g.playerX) / (laneWidth * 0.5))) * 16;
 
       g.spawnTimer -= dt;
       if (g.spawnTimer <= 0) {
@@ -282,6 +288,7 @@ export default function RunScreen() {
   const start = useCallback(() => {
     resetGame();
     setShowSummary(false);
+    setCoinsDoubled(false);
     sound.play("click");
     sound.startEngine();
     setPhase("running");
@@ -355,6 +362,27 @@ export default function RunScreen() {
     setPhase("running");
     toast.show("Second Wind! Ride on", "success");
   }, [ads, toast, g, playerY, sound]);
+
+  const doublingRef = useRef(false);
+  const doubleCoins = useCallback(async () => {
+    if (doublingRef.current || coinsDoubled) return;
+    const earned = coinsForRun(Math.round(g.distance), g.cratesCollected);
+    if (earned <= 0) return;
+    doublingRef.current = true;
+    try {
+      const ok = await ads.showRewarded("coin-double");
+      if (!ok) {
+        toast.show("Ad skipped — no bonus", "info");
+        return;
+      }
+      addCoins(earned);
+      setCoinsDoubled(true);
+      sound.play("coin");
+      toast.show(`+${earned} bonus coins!`, "success");
+    } finally {
+      doublingRef.current = false;
+    }
+  }, [ads, toast, addCoins, g, sound, coinsDoubled]);
 
   const exitTo = useCallback(
     async (dest: "/" | "/garage" | "retry") => {
@@ -435,6 +463,23 @@ export default function RunScreen() {
               </View>
             ))}
 
+          {phase === "running" && trailColor ? (
+            <LinearGradient
+              pointerEvents="none"
+              colors={[addAlpha(trailColor, 0), addAlpha(trailColor, 0.6)]}
+              start={{ x: 0.5, y: 0 }}
+              end={{ x: 0.5, y: 1 }}
+              style={{
+                position: "absolute",
+                width: playerW * 0.55,
+                height: 200,
+                left: g.playerX - playerW * 0.275,
+                top: playerY + playerH - playerW * 1.5 - 150,
+                borderRadius: playerW * 0.3,
+              }}
+            />
+          ) : null}
+
           {phase !== "crashed" && (
             <View
               testID="run-player"
@@ -444,7 +489,7 @@ export default function RunScreen() {
                 top: playerY + playerH - playerW * 1.5,
               }}
             >
-              <PlayerBike size={playerW} boosting={invincibleNow} spin={wheelSpin} {...bikeProps} />
+              <PlayerBike size={playerW} boosting={invincibleNow} spin={wheelSpin} lean={phase === "running" ? g.lean ?? 0 : 0} {...bikeProps} />
             </View>
           )}
 
@@ -529,6 +574,17 @@ export default function RunScreen() {
           </View>
 
           <View style={{ height: 14 }} />
+          {coinsEarned > 0 && !coinsDoubled ? (
+            <>
+              <NeonButton
+                testID="run-doublecoins-button"
+                label={`◎  DOUBLE COINS (+${coinsEarned})`}
+                variant="gold"
+                onPress={doubleCoins}
+              />
+              <View style={{ height: 10 }} />
+            </>
+          ) : null}
           {Math.round(g.score) >= RUN.secondWindScore && !g.secondWindUsed ? (
             <NeonButton testID="run-secondwind-button" label="◎  SECOND WIND (watch ad)" variant="gold" onPress={secondWind} />
           ) : null}

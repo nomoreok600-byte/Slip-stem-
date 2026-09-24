@@ -15,7 +15,7 @@ import { makeStyles, useTheme } from "@/src/theme";
 // Real AdMob native ads only run in a custom/EAS build. Expo Go and web get a
 // labeled placeholder wired to the SAME triggers so the whole game loop is
 // testable in preview.
-export type RewardPlacement = "second-wind" | "crate-rush" | "grid-refresh";
+export type RewardPlacement = "second-wind" | "crate-rush" | "grid-refresh" | "coin-double";
 
 type AdsContextValue = {
   showInterstitial: () => Promise<void>;
@@ -28,6 +28,7 @@ const PLACEMENT_LABEL: Record<RewardPlacement, string> = {
   "second-wind": "Second Wind — rewind 3s & continue",
   "crate-rush": "Crate Rush — open crate instantly",
   "grid-refresh": "Grid Refresh — clear low parts",
+  "coin-double": "Double Coins — 2× the coins from this run",
 };
 
 type Overlay =

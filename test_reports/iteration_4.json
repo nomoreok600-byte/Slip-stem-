@@ -1,0 +1,29 @@
+{
+  "summary": "Frontend-only Playwright test of Slipstream (Expo Web, 375x667) after localStorage.clear(). All 8 acceptance items PASS. HOME renders the top-down bike + all six nav testIDs (home-ride/garage/shop/prestige/leaderboard-button, home-bike-name='Street 250 ›'). SHOP Bikes tab: tapping shop-bike-view-neon opens the garage-view modal with the enlarged spinning bike (gSpin interval running), 3 BonusBars (Speed/Handling/Braking), the '★ SPEED TRAIL' badge for the premium neon bike, garage-view-buy-neon and garage-view-close buttons. Tapping garage-view-buy-neon with 0 coins fires a 'Need 7,000 coins' toast and does NOT close the modal or grant purchase. garage-view-close closes it; tapping garage-view-backdrop also closes it (verified via bounding-box click on the padded area). shop-bike-buy-sport with 0 coins → 'Need 1,200 coins' toast, street bike still shows ✓ (selected). shop-tab-rider shows 8 character cards; shop-tab-paint shows 8 bikeColor swatches (paint-bikeColor-<hex>) and clicking one updates the preview. RUN: run-start-button starts, run-player renders, natural crash after ~6s of holding lane → run-player-dead appears then run-summary (~950ms later) with score/distance/combo/crates and '+10 coins earned'. Coin Doubler: run-doublecoins-button visible when coinsEarned>0 (+10). Tapping opens ad-overlay with ad-rewarded-skip + ad-rewarded-claim testIDs. Skipping → overlay closes, button remains visible, no coin change. Claim → overlay closes, button hides, coins added (leaderboard header shows ◎ 20 = 10 base + 10 bonus). Leaderboard shows 1 row after the run with score 246 · 80m · x2 combo. No red screen. No react-native-svg 'transform-origin' warnings; 0 SVG-related errors. One benign PAGEERROR ('play() failed because the user didn't interact with the document first' — browser autoplay policy on the engine sound, harmless).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [
+    "Optional (carried over): audio autoplay is blocked by browsers until first user gesture; consider deferring sound.startEngine() until after the run-start-button click already occurred (it is, but the pageerror still logs once on load if any sound fires from an effect). Non-blocking.",
+    "Optional: on the summary card, consider disabling run-doublecoins-button while ads.showRewarded() is resolving to prevent double-taps (currently modal blocks the button anyway, so low risk)."
+  ],
+  "critical_code_review_comments": [
+    "shop.tsx: garage-view modal handler correctly gates purchase — onPress calls onBuyBike() then only closes the modal when owned OR affordable (line ~292), matching the acceptance criterion that a failed buy keeps the modal open with the toast. Verified.",
+    "run.tsx doubleCoins() (line 367-379): coinsEarned recomputed from coinsForRun(distance, crates); early-return when earned<=0 so the button never appears on a 0m/0-crate run. addCoins() only fires on ad claim (ok===true) and setCoinsDoubled(true) hides the button — verified end-to-end.",
+    "ads.tsx AdOverlay renders both testIDs (ad-rewarded-claim / ad-rewarded-skip) with correct resolve semantics (true vs false). AdsProvider correctly gates real AdMob when adsAvailable is false (web preview).",
+    "constants.ts BIKES: neon.trail='#00E5FF', moto.trail='#FFC02E', chopper.trail='#FF8A3D' — premium bikes get the trail; sport & cruiser & street correctly have no trail so the SPEED TRAIL chip only renders for premium tiers.",
+    "run.tsx renders LinearGradient trailColor behind the player only when trailColor truthy AND phase==='running' — matches Rider Trails spec. Web preview cannot verify colored trail visually without a premium bike owned (starter save has 0 coins) but the code path is well-guarded."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (frontend-only)", "frontend": "100% — all 8 acceptance items verified"},
+  "seed_data_creation": "Fresh save via localStorage.clear() → 0 coins, street bike + rookie rider owned/selected.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Coin Doubler is fully working: doublecoins button appears iff coinsForRun(distance, crates)>0 (distance≥8). Skip keeps button; claim doubles coins and hides button. Garage View modal works for all bikes: garage-view / garage-view-close / garage-view-backdrop / garage-view-buy-<id> + '★ SPEED TRAIL' chip only for premium (neon/moto/chopper). Rider Trails (LinearGradient behind player) requires owning a premium bike to visually verify on /run — code path is guarded correctly. Interstitial ad only fires every 3 runs (state.stats.runsSinceAd>=3) — single-run tests do not trigger it. Known cosmetic (from iter 3): SLIPSTREAM title clips slightly at 375px because adjustsFontSizeToFit is a no-op on RN Web. Known transient (from iter 3): after router.replace('/') Expo Router briefly keeps /run mounted causing duplicate home-ride-button — use locator('...').first for that transition.",
+  "rca_of_issue": "N/A — no functional bugs found this iteration."
+}

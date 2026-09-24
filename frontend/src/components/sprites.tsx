@@ -24,37 +24,25 @@ function darken(hex: string, f = 0.75): string {
   return `rgb(${r},${g},${b})`;
 }
 
-// ---------- Spinning wheel (rear 3/4) ----------
-function SpinWheel({ cx, cy, r, spin = 0 }: { cx: number; cy: number; r: number; spin?: number }) {
+// ---------- Tire seen from above, with moving tread (spin illusion) ----------
+function Wheel({ x, y, w, h, spin = 0 }: { x: number; y: number; w: number; h: number; spin?: number }) {
+  const gap = 7;
+  const off = ((spin / 360) * gap) % gap;
+  const treads: number[] = [];
+  for (let ty = y + 3; ty < y + h - 3; ty += gap) treads.push(ty);
   return (
     <G>
-      <Circle cx={cx} cy={cy} r={r} fill="#26262B" stroke={OUTLINE} strokeWidth={3.5} />
-      <Circle cx={cx} cy={cy} r={r * 0.52} fill="#C9CDD3" stroke={OUTLINE} strokeWidth={2} />
-      <G transform={`rotate(${spin}, ${cx}, ${cy})`}>
-        {[0, 60, 120].map((a) => {
-          const rad = (a * Math.PI) / 180;
-          const dx = Math.cos(rad) * r * 0.5;
-          const dy = Math.sin(rad) * r * 0.5;
-          return (
-            <Line
-              key={a}
-              x1={cx - dx}
-              y1={cy - dy}
-              x2={cx + dx}
-              y2={cy + dy}
-              stroke="#7A8087"
-              strokeWidth={3}
-              strokeLinecap="round"
-            />
-          );
-        })}
-      </G>
-      <Circle cx={cx} cy={cy} r={r * 0.18} fill={OUTLINE} />
+      <Rect x={x} y={y} width={w} height={h} rx={w / 2} fill="#26262B" stroke={OUTLINE} strokeWidth={2.5} />
+      {treads.map((ty, i) => (
+        <Rect key={i} x={x + 1.5} y={ty + off} width={w - 3} height={2.4} rx={1.2} fill="#55555C" />
+      ))}
     </G>
   );
 }
 
-// ---------- Player motorcycle (rear 3/4 view, fully customizable) ----------
+// =====================================================================
+// PLAYER MOTORCYCLE — TOP-DOWN (front points up = travel direction)
+// =====================================================================
 export function PlayerBike({
   size,
   boosting,
@@ -65,6 +53,7 @@ export function PlayerBike({
   skin = "#E9B48C",
   spin = 0,
   dead = false,
+  lean = 0,
 }: {
   size: number;
   boosting?: boolean;
@@ -75,89 +64,76 @@ export function PlayerBike({
   skin?: string;
   spin?: number;
   dead?: boolean;
+  lean?: number;
 }) {
   const { colors } = useTheme();
   const w = size;
-  const h = size * 1.5;
+  const h = size * 1.35;
   const body = boosting ? "#FFC02E" : bikeColor ?? colors.brake;
   const outfit = outfitColor ?? colors.engine;
+  const rot = dead ? 34 : lean;
 
-  const Bike = (
+  const Content = (
     <>
-      {/* rear wheel */}
-      <SpinWheel cx={50} cy={120} r={22} spin={spin} />
-      {/* exhausts */}
-      <Rect x={16} y={98} width={18} height={11} rx={5} fill="#C9CDD3" stroke={OUTLINE} strokeWidth={3} />
-      <Rect x={66} y={98} width={18} height={11} rx={5} fill="#C9CDD3" stroke={OUTLINE} strokeWidth={3} />
-      {/* body / seat / tank */}
-      <Path d="M30 108 Q26 66 50 56 Q74 66 70 108 Z" fill={body} stroke={OUTLINE} strokeWidth={3.5} />
-      <Path d="M40 74 Q50 68 60 74 L58 96 Q50 92 42 96 Z" fill={darken(body, 0.8)} />
-      {/* tail light */}
-      <Rect x={44} y={102} width={12} height={6} rx={3} fill={colors.error} stroke={OUTLINE} strokeWidth={2} />
+      {/* wheels */}
+      <Wheel x={45} y={12} w={10} h={22} spin={spin} />
+      <Wheel x={43} y={98} w={14} h={30} spin={spin} />
+      {/* chassis / tank */}
+      <Rect x={39} y={36} width={22} height={70} rx={11} fill={body} stroke={OUTLINE} strokeWidth={3.5} />
+      <Rect x={43} y={44} width={14} height={26} rx={7} fill={darken(body, 0.82)} />
       {/* model accents */}
       {model === "sport" || model === "moto" ? (
-        <Path d="M32 60 Q50 50 68 60 L66 66 Q50 58 34 66 Z" fill={darken(body, 0.6)} stroke={OUTLINE} strokeWidth={2.5} />
+        <Path d="M40 34 Q50 26 60 34 L58 44 Q50 38 42 44 Z" fill={darken(body, 0.62)} stroke={OUTLINE} strokeWidth={2} />
       ) : null}
-      {model === "neon" ? (
-        <Path d="M30 110 Q50 118 70 110" stroke="#00E5FF" strokeWidth={4} fill="none" strokeLinecap="round" />
-      ) : null}
-      {model === "moto" ? (
-        <Circle cx={50} cy={88} r={7} fill="#FFFFFF" stroke={OUTLINE} strokeWidth={2} />
-      ) : null}
-      {/* rider torso (outfit) */}
-      <Rect x={36} y={46} width={28} height={36} rx={12} fill={outfit} stroke={OUTLINE} strokeWidth={3.5} />
-      <Rect x={45} y={50} width={10} height={26} rx={5} fill={darken(outfit, 0.8)} />
-      {/* arms to bars */}
-      <Path d="M36 56 Q26 60 24 66" stroke={outfit} strokeWidth={7} strokeLinecap="round" />
-      <Path d="M64 56 Q74 60 76 66" stroke={outfit} strokeWidth={7} strokeLinecap="round" />
-      {/* hands */}
-      <Circle cx={23} cy={67} r={4} fill={skin} stroke={OUTLINE} strokeWidth={2} />
-      <Circle cx={77} cy={67} r={4} fill={skin} stroke={OUTLINE} strokeWidth={2} />
-      {/* neck */}
-      <Rect x={45} y={40} width={10} height={10} rx={4} fill={skin} />
-      {/* helmet */}
-      <Circle cx={50} cy={30} r={17} fill={helmetColor} stroke={OUTLINE} strokeWidth={3.5} />
-      <Path d="M39 30 Q50 21 61 30 L59 37 Q50 32 41 37 Z" fill={darken(helmetColor, 0.55)} />
+      {model === "chopper" ? <Rect x={41} y={102} width={18} height={8} rx={4} fill="#C9CDD3" stroke={OUTLINE} strokeWidth={2} /> : null}
+      {model === "neon" ? <Rect x={44} y={96} width={12} height={8} rx={4} fill="#00E5FF" /> : null}
+      {model === "moto" ? <Circle cx={50} cy={82} r={7} fill="#FFFFFF" stroke={OUTLINE} strokeWidth={2} /> : null}
+      {/* handlebar */}
+      <Line x1={28} y1={42} x2={72} y2={42} stroke="#2C2A2E" strokeWidth={5} strokeLinecap="round" />
+      {/* arms (outfit) */}
+      <Line x1={40} y1={58} x2={29} y2={44} stroke={outfit} strokeWidth={8} strokeLinecap="round" />
+      <Line x1={60} y1={58} x2={71} y2={44} stroke={outfit} strokeWidth={8} strokeLinecap="round" />
+      {/* rider shoulders */}
+      <Rect x={33} y={54} width={34} height={30} rx={14} fill={outfit} stroke={OUTLINE} strokeWidth={3.5} />
+      <Rect x={46} y={56} width={8} height={26} rx={4} fill={darken(outfit, 0.8)} />
+      {/* hands / gloves */}
+      <Circle cx={28} cy={43} r={4.5} fill={skin} stroke={OUTLINE} strokeWidth={2} />
+      <Circle cx={72} cy={43} r={4.5} fill={skin} stroke={OUTLINE} strokeWidth={2} />
+      {/* helmet (head, top view, forward) */}
+      <Circle cx={50} cy={48} r={14} fill={helmetColor} stroke={OUTLINE} strokeWidth={3.5} />
+      <Path d="M40 44 Q50 38 60 44 L58 50 Q50 46 42 50 Z" fill={darken(helmetColor, 0.5)} />
+      <Rect x={48} y={35} width={4} height={12} rx={2} fill={darken(helmetColor, 0.6)} />
       {/* mirrors */}
-      <Circle cx={22} cy={62} r={5} fill={helmetColor} stroke={OUTLINE} strokeWidth={2.5} />
-      <Circle cx={78} cy={62} r={5} fill={helmetColor} stroke={OUTLINE} strokeWidth={2.5} />
+      <Circle cx={26} cy={40} r={3.5} fill={helmetColor} stroke={OUTLINE} strokeWidth={2} />
+      <Circle cx={74} cy={40} r={3.5} fill={helmetColor} stroke={OUTLINE} strokeWidth={2} />
     </>
   );
 
-  if (dead) {
-    return (
-      <Svg width={w} height={h} viewBox="0 0 100 150">
-        <Ellipse cx={50} cy={140} rx={38} ry={8} fill="rgba(0,0,0,0.18)" />
-        <G transform="rotate(26, 50, 90)">
-          {Bike}
-        </G>
-        {/* X eyes over helmet */}
-        <G>
-          <Line x1={38} y1={34} x2={46} y2={42} stroke={OUTLINE} strokeWidth={3} strokeLinecap="round" />
-          <Line x1={46} y1={34} x2={38} y2={42} stroke={OUTLINE} strokeWidth={3} strokeLinecap="round" />
-        </G>
-        {/* dizzy stars */}
-        {[
-          { x: 60, y: 14, r: 5, c: "#FFC02E" },
-          { x: 74, y: 24, r: 4, c: "#FF8A3D" },
-          { x: 66, y: 6, r: 3.5, c: "#7ED957" },
-        ].map((s, i) => (
-          <Star key={i} x={s.x} y={s.y} r={s.r} fill={s.c} />
-        ))}
-      </Svg>
-    );
-  }
-
   return (
-    <Svg width={w} height={h} viewBox="0 0 100 150">
-      <Ellipse cx={50} cy={142} rx={30} ry={7} fill="rgba(0,0,0,0.18)" />
-      {boosting ? (
+    <Svg width={w} height={h} viewBox="0 0 100 140">
+      <Ellipse cx={50} cy={132} rx={26} ry={6} fill="rgba(0,0,0,0.16)" />
+      {boosting && !dead ? (
         <>
-          <Path d="M20 130 L14 150" stroke="#FFC02E" strokeWidth={5} strokeLinecap="round" opacity={0.8} />
-          <Path d="M80 130 L86 150" stroke="#FF8A3D" strokeWidth={5} strokeLinecap="round" opacity={0.8} />
+          <Path d="M50 128 L42 140 L50 136 L58 140 Z" fill="#FFC02E" stroke={OUTLINE} strokeWidth={1.5} />
+          <Path d="M50 126 L46 138 L50 135 L54 138 Z" fill="#FF5A5F" />
         </>
       ) : null}
-      {Bike}
+      <G transform={`rotate(${rot}, 50, 72)`}>{Content}</G>
+      {dead ? (
+        <>
+          <G>
+            <Line x1={42} y1={44} x2={50} y2={52} stroke={OUTLINE} strokeWidth={2.5} strokeLinecap="round" />
+            <Line x1={50} y1={44} x2={42} y2={52} stroke={OUTLINE} strokeWidth={2.5} strokeLinecap="round" />
+          </G>
+          {[
+            { x: 66, y: 20, r: 5, c: "#FFC02E" },
+            { x: 78, y: 30, r: 4, c: "#FF8A3D" },
+            { x: 70, y: 12, r: 3.5, c: "#7ED957" },
+          ].map((s, i) => (
+            <Star key={i} x={s.x} y={s.y} r={s.r} fill={s.c} />
+          ))}
+        </>
+      ) : null}
     </Svg>
   );
 }
@@ -172,58 +148,61 @@ function Star({ x, y, r, fill }: { x: number; y: number; r: number; fill: string
   return <Path d={`M${pts.join(" L")} Z`} fill={fill} stroke={OUTLINE} strokeWidth={1.5} />;
 }
 
-// ---------- Traffic car (rear view) with spinning hubcaps ----------
+// =====================================================================
+// TRAFFIC CAR — TOP-DOWN (roof view)
+// =====================================================================
 export function Car({ size, color, truck, spin = 0 }: { size: number; color: string; truck?: boolean; spin?: number }) {
   if (truck) return <Truck size={size} color={color} spin={spin} />;
   const w = size;
-  const h = size * 1.25;
+  const h = size * 1.2;
   return (
-    <Svg width={w} height={h} viewBox="0 0 100 125">
-      <Ellipse cx={50} cy={118} rx={40} ry={7} fill="rgba(0,0,0,0.16)" />
-      {/* wheels */}
-      <Rect x={6} y={40} width={14} height={60} rx={7} fill="#26262B" stroke={OUTLINE} strokeWidth={3} />
-      <Rect x={80} y={40} width={14} height={60} rx={7} fill="#26262B" stroke={OUTLINE} strokeWidth={3} />
-      <Hubcap cx={13} cy={70} spin={spin} />
-      <Hubcap cx={87} cy={70} spin={spin} />
+    <Svg width={w} height={h} viewBox="0 0 100 120">
+      <Ellipse cx={50} cy={114} rx={42} ry={6} fill="rgba(0,0,0,0.16)" />
+      {/* wheels at 4 corners */}
+      <Wheel x={7} y={16} w={12} h={26} spin={spin} />
+      <Wheel x={81} y={16} w={12} h={26} spin={spin} />
+      <Wheel x={7} y={78} w={12} h={26} spin={spin} />
+      <Wheel x={81} y={78} w={12} h={26} spin={spin} />
       {/* body */}
-      <Rect x={14} y={16} width={72} height={98} rx={20} fill={color} stroke={OUTLINE} strokeWidth={4} />
-      <Rect x={24} y={24} width={52} height={30} rx={12} fill={darken(color, 0.7)} />
-      <Rect x={28} y={30} width={44} height={18} rx={9} fill="#BFE4FF" />
-      <Rect x={20} y={92} width={18} height={12} rx={5} fill="#FF5A5F" stroke={OUTLINE} strokeWidth={2.5} />
-      <Rect x={62} y={92} width={18} height={12} rx={5} fill="#FF5A5F" stroke={OUTLINE} strokeWidth={2.5} />
-      <Rect x={22} y={106} width={56} height={8} rx={4} fill={darken(color, 0.6)} />
+      <Rect x={16} y={6} width={68} height={108} rx={22} fill={color} stroke={OUTLINE} strokeWidth={4} />
+      {/* hood (front, top) */}
+      <Rect x={24} y={12} width={52} height={26} rx={12} fill={darken(color, 0.82)} />
+      {/* roof */}
+      <Rect x={27} y={42} width={46} height={36} rx={13} fill={darken(color, 0.66)} stroke={OUTLINE} strokeWidth={2} />
+      {/* windshield + rear window */}
+      <Path d="M30 42 Q50 34 70 42 L66 40 Q50 33 34 40 Z" fill="#BFE4FF" />
+      <Rect x={31} y={44} width={38} height={14} rx={6} fill="#9FD2F5" />
+      <Rect x={31} y={62} width={38} height={14} rx={6} fill="#9FD2F5" />
+      {/* headlights */}
+      <Rect x={22} y={8} width={12} height={7} rx={3} fill="#FFF2B0" stroke={OUTLINE} strokeWidth={1.5} />
+      <Rect x={66} y={8} width={12} height={7} rx={3} fill="#FFF2B0" stroke={OUTLINE} strokeWidth={1.5} />
+      {/* taillights */}
+      <Rect x={24} y={104} width={14} height={7} rx={3} fill="#FF5A5F" stroke={OUTLINE} strokeWidth={1.5} />
+      <Rect x={62} y={104} width={14} height={7} rx={3} fill="#FF5A5F" stroke={OUTLINE} strokeWidth={1.5} />
     </Svg>
-  );
-}
-
-function Hubcap({ cx, cy, spin }: { cx: number; cy: number; spin: number }) {
-  return (
-    <G>
-      <Circle cx={cx} cy={cy} r={5.5} fill="#C9CDD3" stroke={OUTLINE} strokeWidth={2} />
-      <G transform={`rotate(${spin}, ${cx}, ${cy})`}>
-        <Line x1={cx - 5} y1={cy} x2={cx + 5} y2={cy} stroke="#7A8087" strokeWidth={2} />
-        <Line x1={cx} y1={cy - 5} x2={cx} y2={cy + 5} stroke="#7A8087" strokeWidth={2} />
-      </G>
-    </G>
   );
 }
 
 function Truck({ size, color, spin = 0 }: { size: number; color: string; spin?: number }) {
   const w = size;
-  const h = size * 1.75;
+  const h = size * 1.7;
   return (
-    <Svg width={w} height={h} viewBox="0 0 100 175">
-      <Ellipse cx={50} cy={168} rx={42} ry={8} fill="rgba(0,0,0,0.16)" />
-      <Rect x={4} y={60} width={14} height={70} rx={7} fill="#26262B" stroke={OUTLINE} strokeWidth={3} />
-      <Rect x={82} y={60} width={14} height={70} rx={7} fill="#26262B" stroke={OUTLINE} strokeWidth={3} />
-      <Hubcap cx={11} cy={95} spin={spin} />
-      <Hubcap cx={89} cy={95} spin={spin} />
-      <Rect x={12} y={10} width={76} height={120} rx={12} fill={color} stroke={OUTLINE} strokeWidth={4} />
-      <Rect x={22} y={24} width={56} height={44} rx={8} fill={darken(color, 0.8)} />
-      <Path d="M50 24 L50 68 M22 46 L78 46" stroke={darken(color, 0.55)} strokeWidth={4} />
-      <Rect x={46} y={80} width={8} height={40} rx={4} fill={darken(color, 0.55)} />
-      <Rect x={18} y={118} width={16} height={10} rx={4} fill="#FFC02E" stroke={OUTLINE} strokeWidth={2.5} />
-      <Rect x={66} y={118} width={16} height={10} rx={4} fill="#FFC02E" stroke={OUTLINE} strokeWidth={2.5} />
+    <Svg width={w} height={h} viewBox="0 0 100 170">
+      <Ellipse cx={50} cy={164} rx={44} ry={7} fill="rgba(0,0,0,0.16)" />
+      <Wheel x={5} y={24} w={13} h={28} spin={spin} />
+      <Wheel x={82} y={24} w={13} h={28} spin={spin} />
+      <Wheel x={5} y={124} w={13} h={28} spin={spin} />
+      <Wheel x={82} y={124} w={13} h={28} spin={spin} />
+      {/* cab (front) */}
+      <Rect x={14} y={6} width={72} height={40} rx={14} fill={darken(color, 0.75)} stroke={OUTLINE} strokeWidth={4} />
+      <Rect x={24} y={12} width={52} height={16} rx={7} fill="#BFE4FF" />
+      <Rect x={20} y={8} width={12} height={7} rx={3} fill="#FFF2B0" stroke={OUTLINE} strokeWidth={1.5} />
+      <Rect x={68} y={8} width={12} height={7} rx={3} fill="#FFF2B0" stroke={OUTLINE} strokeWidth={1.5} />
+      {/* cargo box */}
+      <Rect x={12} y={48} width={76} height={110} rx={10} fill={color} stroke={OUTLINE} strokeWidth={4} />
+      <Path d="M50 48 L50 158 M12 100 L88 100" stroke={darken(color, 0.6)} strokeWidth={4} />
+      <Rect x={22} y={58} width={56} height={34} rx={6} fill={darken(color, 0.85)} />
+      <Rect x={22} y={108} width={56} height={40} rx={6} fill={darken(color, 0.85)} />
     </Svg>
   );
 }
@@ -301,7 +280,7 @@ export function PartIcon({ family, size }: { family: Family; size: number }) {
   );
 }
 
-// ---------- Badge (menu / loading) ----------
+// ---------- Badge (loading) ----------
 export function BikeBadge({ size, spin = 0 }: { size: number; spin?: number }) {
   const { colors } = useTheme();
   return (
@@ -313,11 +292,12 @@ export function BikeBadge({ size, spin = 0 }: { size: number; spin?: number }) {
         </SvgGradient>
       </Defs>
       <Circle cx={50} cy={50} r={46} fill="url(#bg)" stroke={OUTLINE} strokeWidth={5} />
-      <G transform="translate(25, 16) scale(0.5)">
-        <SpinWheel cx={50} cy={120} r={22} spin={spin} />
-        <Path d="M30 108 Q26 66 50 56 Q74 66 70 108 Z" fill="#FF7A3D" stroke={OUTLINE} strokeWidth={3.5} />
-        <Circle cx={50} cy={30} r={17} fill="#F2F4F7" stroke={OUTLINE} strokeWidth={3.5} />
-        <Path d="M39 30 Q50 21 61 30 L59 37 Q50 32 41 37 Z" fill="#2F9BE0" />
+      <G transform="translate(28, 22) scale(0.44)">
+        <Wheel x={45} y={12} w={10} h={22} spin={spin} />
+        <Wheel x={43} y={98} w={14} h={30} spin={spin} />
+        <Rect x={39} y={36} width={22} height={70} rx={11} fill="#FF7A3D" stroke={OUTLINE} strokeWidth={3.5} />
+        <Rect x={33} y={54} width={34} height={30} rx={14} fill="#2F9BE0" stroke={OUTLINE} strokeWidth={3.5} />
+        <Circle cx={50} cy={48} r={14} fill="#F2F4F7" stroke={OUTLINE} strokeWidth={3.5} />
       </G>
     </Svg>
   );

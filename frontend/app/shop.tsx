@@ -1,13 +1,13 @@
 import { useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
-import React, { useState } from "react";
-import { Platform, Pressable, ScrollView, Text, View } from "react-native";
+import React, { useEffect, useState } from "react";
+import { Modal, Platform, Pressable, ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useSound } from "@/src/audio";
 import { useToast } from "@/src/components/toast";
 import { CoinIcon, PlayerBike } from "@/src/components/sprites";
-import { addAlpha } from "@/src/components/ui";
+import { NeonButton, StatBar, addAlpha } from "@/src/components/ui";
 import {
   BIKES,
   BIKE_COLORS,
@@ -34,6 +34,14 @@ export default function Shop() {
   const toast = useToast();
   const cos = state.cosmetics;
   const [tab, setTab] = useState<Tab>("bikes");
+  const [viewId, setViewId] = useState<BikeModel | null>(null);
+  const [gSpin, setGSpin] = useState(0);
+
+  useEffect(() => {
+    if (!viewId) return;
+    const t = setInterval(() => setGSpin((s) => (s + 20) % 360), 45);
+    return () => clearInterval(t);
+  }, [viewId]);
 
   const buzz = () => {
     if (Platform.OS !== "web") Haptics.selectionAsync();
@@ -133,18 +141,28 @@ export default function Shop() {
             const affordable = state.coins >= b.cost;
             return (
               <View key={b.id} style={[styles.card, selected && styles.cardSelected]} testID={`shop-bike-${b.id}`}>
-                <View style={styles.cardIcon}>
-                  <PlayerBike size={62} model={b.id} bikeColor={owned && selected ? cos.bikeColor : b.color} helmetColor={cos.helmetColor} outfitColor={cos.outfitColor} />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.cardTitle}>{b.name}</Text>
-                  <Text style={styles.cardDesc}>{b.desc}</Text>
-                  <View style={styles.statTagRow}>
-                    <StatTag label="SPD" value={b.speed} color={colors.engine} />
-                    <StatTag label="HND" value={b.handling} color={colors.aero} />
-                    <StatTag label="BRK" value={b.braking} color={colors.brake} />
+                <Pressable
+                  testID={`shop-bike-view-${b.id}`}
+                  onPress={() => {
+                    setViewId(b.id);
+                    setGSpin(0);
+                    buzz();
+                  }}
+                  style={styles.cardTapArea}
+                >
+                  <View style={styles.cardIcon}>
+                    <PlayerBike size={62} model={b.id} bikeColor={owned && selected ? cos.bikeColor : b.color} helmetColor={cos.helmetColor} outfitColor={cos.outfitColor} />
                   </View>
-                </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.cardTitle}>{b.name}  ›</Text>
+                    <Text style={styles.cardDesc}>{b.desc}</Text>
+                    <View style={styles.statTagRow}>
+                      <StatTag label="SPD" value={b.speed} color={colors.engine} />
+                      <StatTag label="HND" value={b.handling} color={colors.aero} />
+                      <StatTag label="BRK" value={b.braking} color={colors.brake} />
+                    </View>
+                  </View>
+                </Pressable>
                 <Pressable
                   testID={`shop-bike-buy-${b.id}`}
                   onPress={() => onBuyBike(b.id)}
@@ -230,6 +248,73 @@ export default function Shop() {
           </>
         )}
       </ScrollView>
+
+      <Modal visible={viewId !== null} transparent animationType="fade" statusBarTranslucent onRequestClose={() => setViewId(null)}>
+        <Pressable style={styles.modalBackdrop} testID="garage-view-backdrop" onPress={() => setViewId(null)}>
+          <Pressable style={styles.modalCard} onPress={() => {}} testID="garage-view">
+            {viewId
+              ? (() => {
+                  const b = bikeById(viewId);
+                  const owned = cos.ownedBikes.includes(b.id);
+                  const selected = cos.selectedBike === b.id;
+                  const affordable = state.coins >= b.cost;
+                  return (
+                    <>
+                      <Text style={styles.modalName}>{b.name}</Text>
+                      <View style={styles.modalStage}>
+                        <PlayerBike
+                          size={150}
+                          model={b.id}
+                          spin={gSpin}
+                          bikeColor={owned && selected ? cos.bikeColor : b.color}
+                          helmetColor={cos.helmetColor}
+                          outfitColor={cos.outfitColor}
+                        />
+                      </View>
+                      <Text style={styles.modalDesc}>{b.desc}</Text>
+                      <View style={styles.modalStats}>
+                        <BonusBar label="Speed" value={b.speed} max={18} color={colors.engine} />
+                        <BonusBar label="Handling" value={b.handling} max={14} color={colors.aero} />
+                        <BonusBar label="Braking" value={b.braking} max={12} color={colors.brake} />
+                      </View>
+                      {b.trail ? (
+                        <View style={[styles.trailChip, { borderColor: b.trail, backgroundColor: addAlpha(b.trail, 0.16) }]}>
+                          <Text style={[styles.trailText, { color: b.trail === "#00E5FF" ? colors.brake : b.trail }]}>★ SPEED TRAIL</Text>
+                        </View>
+                      ) : null}
+                      <View style={{ height: 14 }} />
+                      <NeonButton
+                        testID={`garage-view-buy-${b.id}`}
+                        variant={selected ? "success" : owned ? "secondary" : affordable ? "gold" : "ghost"}
+                        label={selected ? "SELECTED ✓" : owned ? "USE THIS BIKE" : `BUY · ${b.cost.toLocaleString()} COINS`}
+                        onPress={() => {
+                          onBuyBike(b.id);
+                          if (cos.ownedBikes.includes(b.id) || state.coins >= b.cost) setViewId(null);
+                        }}
+                      />
+                      <View style={{ height: 8 }} />
+                      <NeonButton testID="garage-view-close" variant="ghost" label="Close" onPress={() => setViewId(null)} />
+                    </>
+                  );
+                })()
+              : null}
+          </Pressable>
+        </Pressable>
+      </Modal>
+    </View>
+  );
+}
+
+function BonusBar({ label, value, max, color }: { label: string; value: number; max: number; color: string }) {
+  const styles = useStyles();
+  const pct = value <= 0 ? 0 : Math.max(8, Math.min(100, (value / max) * 100));
+  return (
+    <View style={styles.bonusRow}>
+      <Text style={styles.bonusLabel}>{label}</Text>
+      <View style={styles.bonusTrack}>
+        <View style={[styles.bonusFill, { width: `${pct}%`, backgroundColor: color }]} />
+      </View>
+      <Text style={styles.bonusVal}>{value > 0 ? `+${value}` : "—"}</Text>
     </View>
   );
 }
@@ -362,6 +447,7 @@ const useStyles = makeStyles((colors) => ({
     borderBottomWidth: 6,
   },
   cardSelected: { borderColor: colors.success },
+  cardTapArea: { flexDirection: "row", alignItems: "center", gap: 12, flex: 1 },
   cardIcon: { width: 64, height: 92, alignItems: "center", justifyContent: "center" },
   cardTitle: { color: colors.onSurface, fontSize: 16, fontWeight: "900" },
   cardDesc: { color: colors.muted, fontSize: 12, fontWeight: "600", marginTop: 2, marginBottom: 6 },
@@ -405,4 +491,47 @@ const useStyles = makeStyles((colors) => ({
   swatchActive: { borderColor: colors.success, borderWidth: 4 },
   swatchCheck: { color: "#FFFFFF", fontWeight: "900", fontSize: 18, textShadowColor: OUTLINE, textShadowRadius: 2, textShadowOffset: { width: 1, height: 1 } },
   paintHint: { color: colors.muted, fontSize: 12, textAlign: "center", marginTop: 4, fontWeight: "600" },
+  modalBackdrop: { flex: 1, backgroundColor: "rgba(44,36,24,0.7)", alignItems: "center", justifyContent: "center", padding: 24 },
+  modalCard: {
+    width: "100%",
+    maxWidth: 380,
+    backgroundColor: colors.surfaceSecondary,
+    borderRadius: 24,
+    borderWidth: 3,
+    borderColor: OUTLINE,
+    borderBottomWidth: 8,
+    padding: 20,
+    alignItems: "center",
+  },
+  modalName: { color: colors.onSurface, fontSize: 24, fontWeight: "900", letterSpacing: 0.5 },
+  modalStage: {
+    width: "100%",
+    height: 210,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.surfaceTertiary,
+    borderRadius: 20,
+    borderWidth: 3,
+    borderColor: OUTLINE,
+    marginTop: 12,
+    marginBottom: 12,
+  },
+  modalDesc: { color: colors.muted, fontSize: 13, fontWeight: "600", textAlign: "center", marginBottom: 14 },
+  modalStats: { width: "100%", gap: 8 },
+  bonusRow: { flexDirection: "row", alignItems: "center" },
+  bonusLabel: { color: colors.onSurfaceTertiary, width: 74, fontSize: 12, fontWeight: "800" },
+  bonusTrack: {
+    flex: 1,
+    height: 14,
+    backgroundColor: colors.surfaceTertiary,
+    borderRadius: 8,
+    overflow: "hidden",
+    marginHorizontal: 10,
+    borderWidth: 2,
+    borderColor: OUTLINE,
+  },
+  bonusFill: { height: "100%" },
+  bonusVal: { color: colors.onSurface, width: 34, textAlign: "right", fontSize: 13, fontWeight: "900" },
+  trailChip: { marginTop: 14, borderRadius: 12, borderWidth: 2, paddingHorizontal: 12, paddingVertical: 5 },
+  trailText: { fontWeight: "900", fontSize: 12, letterSpacing: 1 },
 }));
