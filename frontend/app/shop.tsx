@@ -55,6 +55,10 @@ export default function Shop() {
       buzz();
       return;
     }
+    if (def.rewardOnly) {
+      toast.show("Win the Phantom from the Weekly Challenge!", "info");
+      return;
+    }
     if (state.coins < def.cost) {
       toast.show(`Need ${def.cost.toLocaleString()} coins`, "error");
       return;
@@ -139,6 +143,7 @@ export default function Shop() {
             const owned = cos.ownedBikes.includes(b.id);
             const selected = cos.selectedBike === b.id;
             const affordable = state.coins >= b.cost;
+            const locked = !!b.rewardOnly && !owned;
             return (
               <View key={b.id} style={[styles.card, selected && styles.cardSelected]} testID={`shop-bike-${b.id}`}>
                 <Pressable
@@ -183,6 +188,8 @@ export default function Shop() {
                     <Text style={[styles.buyText, { color: colors.onSuccess }]}>✓</Text>
                   ) : owned ? (
                     <Text style={[styles.buyText, { color: colors.onSurface }]}>USE</Text>
+                  ) : locked ? (
+                    <Text style={[styles.buyText, { color: colors.onSurface }]}>🏆</Text>
                   ) : (
                     <>
                       <CoinIcon size={14} />
@@ -285,11 +292,19 @@ export default function Shop() {
                       <View style={{ height: 14 }} />
                       <NeonButton
                         testID={`garage-view-buy-${b.id}`}
-                        variant={selected ? "success" : owned ? "secondary" : affordable ? "gold" : "ghost"}
-                        label={selected ? "SELECTED ✓" : owned ? "USE THIS BIKE" : `BUY · ${b.cost.toLocaleString()} COINS`}
+                        variant={selected ? "success" : owned ? "secondary" : b.rewardOnly ? "ghost" : affordable ? "gold" : "ghost"}
+                        label={
+                          selected
+                            ? "SELECTED ✓"
+                            : owned
+                              ? "USE THIS BIKE"
+                              : b.rewardOnly
+                                ? "🏆 WEEKLY REWARD ONLY"
+                                : `BUY · ${b.cost.toLocaleString()} COINS`
+                        }
                         onPress={() => {
                           onBuyBike(b.id);
-                          if (cos.ownedBikes.includes(b.id) || state.coins >= b.cost) setViewId(null);
+                          if (cos.ownedBikes.includes(b.id) || (!b.rewardOnly && state.coins >= b.cost)) setViewId(null);
                         }}
                       />
                       <View style={{ height: 8 }} />

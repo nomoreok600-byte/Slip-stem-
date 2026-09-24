@@ -12,6 +12,8 @@ import type {
   RunModifiers,
   RunResult,
   Upgrades,
+  Weekly,
+  WeeklyGoalType,
 } from "./types";
 
 let idCounter = 0;
@@ -46,6 +48,7 @@ export function initialState(): GameState {
     tokens: 0,
     coins: 0,
     daily: makeDaily(todayKey(), 0, null),
+    weekly: makeWeekly(weekKey()),
     upgrades: { grid5: false, scoreMult: 0, handling: 0, higherTier: 0 },
     stats: {
       bestScore: 0,
@@ -126,6 +129,46 @@ export function dailyLabel(d: Daily): string {
 export function dailyRewards(streak: number): { tokens: number; coins: number; crate: boolean } {
   const s = Math.max(1, streak);
   return { tokens: 3 + Math.min(s, 7), coins: 150 + s * 25, crate: s % 3 === 0 };
+}
+
+// ---------- Weekly challenge (multi-day, cumulative) ----------
+export function weekKey(d = new Date()): string {
+  // ISO-ish week key: YYYY-Www based on Thursday of current week
+  const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  const dayNum = (date.getUTCDay() + 6) % 7;
+  date.setUTCDate(date.getUTCDate() - dayNum + 3);
+  const firstThursday = new Date(Date.UTC(date.getUTCFullYear(), 0, 4));
+  const week = 1 + Math.round(((date.getTime() - firstThursday.getTime()) / 86400000 - 3 + ((firstThursday.getUTCDay() + 6) % 7)) / 7);
+  return `${date.getUTCFullYear()}-W${String(week).padStart(2, "0")}`;
+}
+
+const WEEKLY_TYPES: WeeklyGoalType[] = ["distance", "score", "runs", "crates"];
+
+export function makeWeekly(wk: string): Weekly {
+  const h = hashKey(wk);
+  const type = WEEKLY_TYPES[h % WEEKLY_TYPES.length];
+  const target =
+    type === "distance"
+      ? 20000 + (h % 4) * 5000
+      : type === "score"
+        ? 40000 + (h % 4) * 15000
+        : type === "runs"
+          ? 20 + (h % 5) * 5
+          : 25 + (h % 5) * 5;
+  return { weekKey: wk, type, target, progress: 0, claimed: false };
+}
+
+export function weeklyLabel(w: Weekly): string {
+  switch (w.type) {
+    case "distance":
+      return `Ride ${w.target.toLocaleString()}m this week`;
+    case "score":
+      return `Score ${w.target.toLocaleString()} total this week`;
+    case "runs":
+      return `Complete ${w.target} runs this week`;
+    case "crates":
+      return `Collect ${w.target} crates this week`;
+  }
 }
 
 export function coinsForRun(distance: number, crates: number): number {

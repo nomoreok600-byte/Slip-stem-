@@ -1,40 +1,33 @@
-import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import * as Haptics from "expo-haptics";
 import { useRouter } from "expo-router";
 import * as Sharing from "expo-sharing";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Platform, Pressable, Text, useWindowDimensions, View } from "react-native";
+import { Animated, Easing, Platform, Pressable, Text, useWindowDimensions, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { runOnJS } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import Svg, { Line, Polygon } from "react-native-svg";
 import { captureRef } from "react-native-view-shot";
 
 import { useAds } from "@/src/ads";
-import { ENV_IMAGE } from "@/src/assets";
 import { useSound } from "@/src/audio";
 import { useToast } from "@/src/components/toast";
 import { Car, CoinIcon, CrateIcon, PlayerBike } from "@/src/components/sprites";
 import { NeonButton, addAlpha } from "@/src/components/ui";
 import { ENVIRONMENTS, RUN, bikeById } from "@/src/game/constants";
 import { coinsForRun } from "@/src/game/logic";
+import { ROAD, laneToNorm, project } from "@/src/game/pseudo3d";
 import { useGame, useRunModifiers } from "@/src/game/store";
 import { makeStyles, useTheme } from "@/src/theme";
 
 const OUTLINE = "#3A2E1E";
 type Phase = "ready" | "running" | "crashed";
 
-type Vehicle = {
-  id: number;
-  lane: number;
-  y: number;
-  w: number;
-  h: number;
-  truck: boolean;
-  color: string;
-  counted: boolean;
-};
-type CrateEnt = { id: number; lane: number; y: number };
+type Vehicle = { id: number; lane: number; z: number; truck: boolean; color: string; counted: boolean };
+type CrateEnt = { id: number; lane: number; z: number };
+type PowerUp = { id: number; lane: number; z: number; kind: "magnet" | "shield" };
+type Prop = { id: number; side: number; z: number; kind: string; color: string; h: number };
 
 const CAP_DT = 0.05;
 
@@ -44,8 +37,7 @@ export default function RunScreen() {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
-  const { state, recordRun, clearRunsSinceAd } = useGame();
-  const { addCoins } = useGame();
+  const { state, recordRun, clearRunsSinceAd, addCoins } = useGame();
   const modifiers = useRunModifiers();
   const ads = useAds();
   const toast = useToast();
@@ -55,47 +47,63 @@ export default function RunScreen() {
   const [phase, setPhase] = useState<Phase>("ready");
   const [showSummary, setShowSummary] = useState(false);
   const [coinsDoubled, setCoinsDoubled] = useState(false);
+  const [banner, setBanner] = useState<{ text: string; id: number } | null>(null);
   const [, setTick] = useState(0);
 
   const cos = state.cosmetics;
   const trailColor = useMemo(() => bikeById(cos.selectedBike).trail, [cos.selectedBike]);
   const bikeProps = useMemo(
-    () => ({
-      model: cos.selectedBike,
-      bikeColor: cos.bikeColor,
-      helmetColor: cos.helmetColor,
-      outfitColor: cos.outfitColor,
-    }),
+    () => ({ model: cos.selectedBike, bikeColor: cos.bikeColor, helmetColor: cos.helmetColor, outfitColor: cos.outfitColor }),
     [cos.selectedBike, cos.bikeColor, cos.helmetColor, cos.outfitColor],
   );
 
-  const roadMargin = Math.round(width * 0.05);
-  const roadWidth = width - roadMargin * 2;
+  const W = width;
+  const H = height;
+  const horizonY = H * ROAD.horizonRatio;
   const lanes = RUN.lanes;
-  const laneWidth = roadWidth / lanes;
-  const playerW = laneWidth * RUN.playerWidthRatio;
-  const playerH = RUN.playerHeight;
-  const playerY = height - insets.bottom - 150;
 
-  const laneCenterX = useCallback(
-    (lane: number) => roadMargin + laneWidth * (lane + 0.5),
-    [roadMargin, laneWidth],
-  );
-
-  const vehicleColors = useMemo(
-    () => ["#E8544E", "#4E9BE8", "#8E6BE8", "#63C36B", "#FF9F45", "#E85499"],
-    [],
+  const bannerAnim = useRef(new Animated.Value(0)).current;
+  const showBanner = useCallback(
+    (text: string) => {
+      setBanner({ text, id: Date.now() + Math.random() });
+      bannerAnim.setValue(0);
+      Animated.sequence([
+        Animated.spring(bannerAnim, { toValue: 1, useNativeDriver: true, friction: 5, tension: 120 }),
+        Animated.delay(650),
+        Animated.timing(bannerAnim, { toValue: 0, duration: 260, easing: Easing.in(Easing.quad), useNativeDriver: true }),
+      ]).start();
+    },
+    [bannerAnim],
   );
 
   const g = useRef<any>({}).current;
   const rafRef = useRef<number | null>(null);
   const nextIdRef = useRef(1);
 
+  const vehicleColors = useMemo(() => ["#E8544E", "#4E9BE8", "#8E6BE8", "#63C36B", "#FF9F45", "#E85499"], []);
+
+  const seedProps = useCallback((env: any) => {
+    const arr: Prop[] = [];
+    for (let i = 0; i < 12; i++) {
+      arr.push({
+        id: nextIdRef.current++,
+        side: i % 2 === 0 ? -1 : 1,
+        z: 20 + i * (ROAD.farZ / 12),
+        kind: env.prop,
+        color: env.propColors[Math.floor(Math.random() * env.propColors.length)],
+        h: 60 + Math.random() * 120,
+      });
+    }
+    return arr;
+  }, []);
+
   const resetGame = useCallback(() => {
     g.playerLane = Math.floor(lanes / 2);
-    g.playerX = laneCenterX(g.playerLane);
+    g.playerNorm = laneToNorm(g.playerLane, lanes);
     g.vehicles = [] as Vehicle[];
     g.crateEnts = [] as CrateEnt[];
+    g.powerUps = [] as PowerUp[];
+    g.props = seedProps(ENVIRONMENTS[0]);
     g.meter = 0;
     g.score = 0;
     g.distance = 0;
@@ -103,10 +111,13 @@ export default function RunScreen() {
     g.bestCombo = 0;
     g.multiplier = 1;
     g.cratesCollected = 0;
-    g.spawnTimer = 0.6;
+    g.spawnTimer = 0.7;
     g.crateTimer = 0;
+    g.powerTimer = 8;
     g.elapsed = 0;
     g.invincibleUntil = 0;
+    g.shieldUntil = 0;
+    g.magnetUntil = 0;
     g.brakeUntil = 0;
     g.boostActive = false;
     g.boostUntil = 0;
@@ -119,13 +130,13 @@ export default function RunScreen() {
     g.lean = 0;
     g.lastTime = 0;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [lanes, laneCenterX, modifiers.turbo]);
+  }, [lanes, seedProps, modifiers.turbo]);
 
   const changeLane = useCallback(
     (dir: number) => {
       if (phase !== "running") return;
       let step = dir;
-      if (g.rain && !modifiers.hasABS) {
+      if (g.rain && !modifiers.hasABS && g.elapsed > g.shieldUntil) {
         const slip = (1 - modifiers.rainGrip) * 0.8;
         if (Math.random() < slip) step = dir * 2;
       }
@@ -147,36 +158,26 @@ export default function RunScreen() {
     g.boostUntil = g.elapsed + 3;
     g.invincibleUntil = g.elapsed + 3;
     sound.play("boost");
+    showBanner("TURBO!");
     if (Platform.OS !== "web") Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-  }, [phase, g, sound]);
+  }, [phase, g, sound, showBanner]);
 
   const spawnVehicle = useCallback(() => {
     const lane = Math.floor(Math.random() * lanes);
-    const tooClose = g.vehicles.some((v: Vehicle) => v.lane === lane && v.y < 150);
+    const tooClose = g.vehicles.some((v: Vehicle) => v.lane === lane && v.z > ROAD.farZ - 60);
     if (tooClose) return;
-    const truck = Math.random() < 0.22;
-    const w = laneWidth * (truck ? 0.66 : 0.62);
-    const h = truck ? w * 1.75 : w * 1.25;
     g.vehicles.push({
       id: nextIdRef.current++,
       lane,
-      y: -h - Math.random() * 40,
-      w,
-      h,
-      truck,
+      z: ROAD.farZ,
+      truck: Math.random() < 0.22,
       color: vehicleColors[Math.floor(Math.random() * vehicleColors.length)],
       counted: false,
     });
-  }, [lanes, laneWidth, vehicleColors, g]);
-
-  const spawnCrate = useCallback(() => {
-    const lane = Math.floor(Math.random() * lanes);
-    g.crateEnts.push({ id: nextIdRef.current++, lane, y: -40 });
-  }, [lanes, g]);
+  }, [lanes, vehicleColors, g]);
 
   const onCrash = useCallback(() => {
     g.bestCombo = Math.max(g.bestCombo, g.combo);
-    g.crashX = g.playerX;
     sound.stopEngine();
     sound.play("crash");
     if (Platform.OS !== "web") Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
@@ -184,6 +185,15 @@ export default function RunScreen() {
     setPhase("crashed");
     setTimeout(() => setShowSummary(true), 950);
   }, [g, sound]);
+
+  const comboText = (c: number): string | null => {
+    if (c === 2) return "NICE!";
+    if (c === 4) return "SLICK!";
+    if (c === 6) return "CLOSE CALL!";
+    if (c === 9) return "UNREAL!";
+    if (c >= 12 && c % 3 === 0) return "LEGEND!";
+    return null;
+  };
 
   const step = useCallback(
     (time: number) => {
@@ -194,26 +204,30 @@ export default function RunScreen() {
 
       g.elapsed += dt;
       if (g.boostActive && g.elapsed > g.boostUntil) g.boostActive = false;
-      const invincible = g.elapsed < g.invincibleUntil || g.boostActive;
+      const shielded = g.elapsed < g.shieldUntil;
+      const magnet = g.elapsed < g.magnetUntil;
+      const invincible = g.elapsed < g.invincibleUntil || g.boostActive || shielded;
 
       const ramp = 1 + (Math.min(g.elapsed, RUN.rampSeconds) / RUN.rampSeconds) * (RUN.maxTimeRamp - 1);
       const braking = g.elapsed < g.brakeUntil ? RUN.brakeFactor : 1;
-      const boostMul = g.boostActive ? 1.4 : 1;
-      const worldSpeed = RUN.baseSpeed * modifiers.speedMult * ramp * braking * boostMul;
+      const boostMul = g.boostActive ? 1.5 : 1;
+      const zSpeed = 92 * modifiers.speedMult * ramp * braking * boostMul;
 
-      g.distance += worldSpeed * dt * 0.05;
+      g.distance += zSpeed * dt * 0.62;
       g.envIndex = Math.floor(g.distance / RUN.envDistance) % ENVIRONMENTS.length;
       g.rain = ENVIRONMENTS[g.envIndex].rain;
 
       if (g.elapsed - g.lastNearMiss > 2.5) g.combo = 0;
       g.multiplier = Math.min(5, 1 + g.combo * 0.1) * (g.boostActive ? 2 : 1);
-      g.score += worldSpeed * dt * 0.12 * g.multiplier * modifiers.scoreMult;
+      g.score += zSpeed * dt * 0.14 * g.multiplier * modifiers.scoreMult;
 
-      const targetX = laneCenterX(g.playerLane);
-      const laneSpeed = 12 * modifiers.handling;
-      g.playerX += (targetX - g.playerX) * Math.min(1, dt * laneSpeed);
-      g.lean = Math.max(-1, Math.min(1, (targetX - g.playerX) / (laneWidth * 0.5))) * 16;
+      // player lane lerp
+      const targetNorm = laneToNorm(g.playerLane, lanes);
+      const laneSpeed = 10 * modifiers.handling;
+      g.playerNorm += (targetNorm - g.playerNorm) * Math.min(1, dt * laneSpeed);
+      g.lean = Math.max(-1, Math.min(1, (targetNorm - g.playerNorm) * 6)) * 16;
 
+      // spawns
       g.spawnTimer -= dt;
       if (g.spawnTimer <= 0) {
         spawnVehicle();
@@ -223,33 +237,59 @@ export default function RunScreen() {
       if (g.boostActive) {
         g.crateTimer -= dt;
         if (g.crateTimer <= 0) {
-          spawnCrate();
+          g.crateEnts.push({ id: nextIdRef.current++, lane: Math.floor(Math.random() * lanes), z: ROAD.farZ });
           g.crateTimer = RUN.crateSpawnEvery;
         }
       }
+      g.powerTimer -= dt;
+      if (g.powerTimer <= 0) {
+        g.powerUps.push({
+          id: nextIdRef.current++,
+          lane: Math.floor(Math.random() * lanes),
+          z: ROAD.farZ,
+          kind: Math.random() < 0.5 ? "magnet" : "shield",
+        });
+        g.powerTimer = 13 + Math.random() * 6;
+      }
 
-      const pTop = playerY;
-      const pBottom = playerY + playerH;
-      const nextVehicles: Vehicle[] = [];
+      // scenery props
+      for (const pr of g.props as Prop[]) {
+        pr.z -= zSpeed * dt;
+        if (pr.z < -20) {
+          pr.z += ROAD.farZ;
+          const env = ENVIRONMENTS[g.envIndex];
+          pr.kind = env.prop;
+          pr.color = env.propColors[Math.floor(Math.random() * env.propColors.length)];
+          pr.h = 60 + Math.random() * 120;
+          pr.side = -pr.side;
+        }
+      }
+
+      // vehicles
       let crashed = false;
-      for (const v of g.vehicles) {
-        v.y += worldSpeed * dt;
-        const overlap = v.y < pBottom && v.y + v.h > pTop;
-        if (overlap && !v.counted) {
+      const nextVehicles: Vehicle[] = [];
+      for (const v of g.vehicles as Vehicle[]) {
+        v.z -= zSpeed * dt;
+        if (!v.counted && v.z <= ROAD.playerZ) {
+          v.counted = true;
           if (v.lane === g.playerLane) {
             if (!invincible) crashed = true;
-            v.counted = true;
+            else if (shielded && !g.boostActive) {
+              g.shieldUntil = 0; // shield absorbs the hit
+              showBanner("BLOCKED!");
+            }
           } else if (Math.abs(v.lane - g.playerLane) === 1) {
-            v.counted = true;
             g.combo += 1;
             g.bestCombo = Math.max(g.bestCombo, g.combo);
             g.lastNearMiss = g.elapsed;
             g.meter = Math.min(RUN.meterMax, g.meter + RUN.meterPerNearMiss);
             g.score += 20 * g.multiplier;
             sound.play("whoosh");
+            const bt = comboText(g.combo);
+            if (bt) showBanner(bt);
           }
         }
-        if (v.y < height + 80) nextVehicles.push(v);
+        if (v.z > -25) nextVehicles.push(v);
       }
       g.vehicles = nextVehicles;
 
@@ -259,20 +299,45 @@ export default function RunScreen() {
         g.invincibleUntil = g.elapsed + RUN.boostSeconds;
         g.meter = 0;
         sound.play("boost");
+        showBanner("SLIPSTREAM!");
       }
 
+      // crates (magnet attracts)
       const nextCrates: CrateEnt[] = [];
-      for (const c of g.crateEnts) {
-        c.y += worldSpeed * dt;
-        const overlap = c.y < pBottom && c.y + 40 > pTop;
-        if (overlap && c.lane === g.playerLane) {
-          g.cratesCollected += 1;
-          sound.play("coin");
-          continue;
+      for (const c of g.crateEnts as CrateEnt[]) {
+        c.z -= zSpeed * dt;
+        if (magnet && c.z < 140) c.lane += (g.playerLane - c.lane) * Math.min(1, dt * 6);
+        if (c.z <= ROAD.playerZ) {
+          if (Math.abs(c.lane - g.playerLane) < 0.6) {
+            g.cratesCollected += 1;
+            sound.play("coin");
+            continue;
+          }
         }
-        if (c.y < height + 80) nextCrates.push(c);
+        if (c.z > -25) nextCrates.push(c);
       }
       g.crateEnts = nextCrates;
+
+      // power-ups
+      const nextPU: PowerUp[] = [];
+      for (const pu of g.powerUps as PowerUp[]) {
+        pu.z -= zSpeed * dt;
+        if (pu.z <= ROAD.playerZ) {
+          if (pu.lane === g.playerLane) {
+            if (pu.kind === "shield") {
+              g.shieldUntil = g.elapsed + 6;
+              showBanner("SHIELDED!");
+            } else {
+              g.magnetUntil = g.elapsed + 8;
+              showBanner("MAGNET!");
+            }
+            sound.play("boost");
+            continue;
+          }
+        }
+        if (pu.z > -25) nextPU.push(pu);
+      }
+      g.powerUps = nextPU;
 
       setTick((t) => (t + 1) % 1000000);
 
@@ -282,13 +347,14 @@ export default function RunScreen() {
       }
       rafRef.current = requestAnimationFrame(step);
     },
-    [modifiers.speedMult, modifiers.scoreMult, modifiers.handling, laneCenterX, spawnVehicle, spawnCrate, playerY, playerH, height, onCrash, sound, g],
+    [modifiers.speedMult, modifiers.scoreMult, modifiers.handling, lanes, spawnVehicle, onCrash, sound, showBanner, g],
   );
 
   const start = useCallback(() => {
     resetGame();
     setShowSummary(false);
     setCoinsDoubled(false);
+    setBanner(null);
     sound.play("click");
     sound.startEngine();
     setPhase("running");
@@ -303,20 +369,15 @@ export default function RunScreen() {
     };
   }, [phase, step, g]);
 
-  useEffect(() => {
-    return () => sound.stopEngine();
-  }, [sound]);
+  useEffect(() => () => sound.stopEngine(), [sound]);
 
   const gesture = useMemo(() => {
     const pan = Gesture.Pan().onEnd((e) => {
       "worklet";
       const tx = e.translationX;
       const ty = e.translationY;
-      if (Math.abs(tx) > Math.abs(ty) && Math.abs(tx) > 12) {
-        runOnJS(changeLane)(tx > 0 ? 1 : -1);
-      } else if (ty > 30) {
-        runOnJS(brakePulse)();
-      }
+      if (Math.abs(tx) > Math.abs(ty) && Math.abs(tx) > 12) runOnJS(changeLane)(tx > 0 ? 1 : -1);
+      else if (ty > 30) runOnJS(brakePulse)();
     });
     const tap = Gesture.Tap()
       .maxDuration(350)
@@ -355,13 +416,14 @@ export default function RunScreen() {
       return;
     }
     g.secondWindUsed = true;
-    g.vehicles = g.vehicles.filter((v: Vehicle) => v.y < playerY - 220 || v.y > playerY + 120);
+    g.vehicles = (g.vehicles as Vehicle[]).filter((v) => v.z > 60);
     g.invincibleUntil = g.elapsed + 2.5;
     g.combo = 0;
     sound.startEngine();
+    setShowSummary(false);
     setPhase("running");
     toast.show("Second Wind! Ride on", "success");
-  }, [ads, toast, g, playerY, sound]);
+  }, [ads, toast, g, sound]);
 
   const doublingRef = useRef(false);
   const doubleCoins = useCallback(async () => {
@@ -409,104 +471,153 @@ export default function RunScreen() {
   }, [toast]);
 
   const env = ENVIRONMENTS[phase === "ready" ? 0 : g.envIndex ?? 0];
-  const invincibleNow = phase === "running" && (g.elapsed < g.invincibleUntil || g.boostActive);
+  const shieldedNow = phase === "running" && g.elapsed < g.shieldUntil;
+  const magnetNow = phase === "running" && g.elapsed < g.magnetUntil;
+  const invincibleNow = phase === "running" && (g.elapsed < g.invincibleUntil || g.boostActive || shieldedNow);
   const wheelSpin = phase === "running" ? Math.round((g.elapsed * 1100) % 360) : 0;
   const coinsEarned = phase === "crashed" ? coinsForRun(Math.round(g.distance), g.cratesCollected) : 0;
   const isNewBest = phase === "crashed" && Math.round(g.score) > (g.prevBest ?? 0) && Math.round(g.score) > 0;
 
+  // player projection
+  const playerProj = project(ROAD.playerZ, phase === "running" ? g.playerNorm ?? 0 : 0, W, H);
+  const playerW = W * 0.2;
+
+  // road polygon points
+  const bottomHalf = W * ROAD.roadHalfBottom;
+  const topHalf = bottomHalf * (1 / (1 + ROAD.farZ / 200)) * 0.12 + 8;
+  const roadPoly = `${W / 2 - bottomHalf},${H} ${W / 2 + bottomHalf},${H} ${W / 2 + topHalf},${horizonY} ${W / 2 - topHalf},${horizonY}`;
+
+  // moving dashes on lane dividers
+  const dashOffset = ((g.distance ?? 0) * 0.35) % 40;
+  const dividers: { norm: number }[] = [];
+  for (let i = 0; i < lanes - 1; i++) {
+    dividers.push({ norm: (laneToNorm(i, lanes) + laneToNorm(i + 1, lanes)) / 2 });
+  }
+
   return (
     <View style={styles.container}>
-      <Image source={ENV_IMAGE[env.key]} style={styles.bg} contentFit="cover" />
+      {/* sky */}
+      <LinearGradient colors={[env.skyTop, env.skyBot]} style={{ position: "absolute", left: 0, right: 0, top: 0, height: horizonY + 2 }} />
+      {/* ground */}
+      <View style={{ position: "absolute", left: 0, right: 0, top: horizonY, bottom: 0, backgroundColor: env.ground }} />
+      {/* sun/moon */}
+      <View style={[styles.sun, { top: horizonY - 46, backgroundColor: env.key === "night" ? "#EAF0FF" : "#FFF3C4" }]} />
+
       <GestureDetector gesture={gesture}>
         <View style={styles.playArea} testID="run-play-area">
-          {/* road band */}
-          <View
-            style={{
-              position: "absolute",
-              left: roadMargin - 8,
-              right: roadMargin - 8,
-              top: 0,
-              bottom: 0,
-              backgroundColor: colors.road,
-              opacity: 0.92,
-              borderLeftWidth: 6,
-              borderRightWidth: 6,
-              borderColor: colors.warning,
-            }}
-          />
-          {Array.from({ length: lanes - 1 }).map((_, i) => (
-            <View
-              key={i}
-              style={{
-                position: "absolute",
-                left: roadMargin + laneWidth * (i + 1) - 2,
-                top: 0,
-                bottom: 0,
-                width: 4,
-                backgroundColor: colors.roadLine,
-                opacity: 0.45,
-              }}
-            />
-          ))}
+          {/* road */}
+          <Svg style={{ position: "absolute", left: 0, top: 0, right: 0, bottom: 0 }} width={W} height={H}>
+            <Polygon points={roadPoly} fill={env.road} stroke={OUTLINE} strokeWidth={3} />
+            <Line x1={W / 2 - bottomHalf} y1={H} x2={W / 2 - topHalf} y2={horizonY} stroke={env.line} strokeWidth={4} />
+            <Line x1={W / 2 + bottomHalf} y1={H} x2={W / 2 + topHalf} y2={horizonY} stroke={env.line} strokeWidth={4} />
+          </Svg>
 
-          {phase === "running" &&
-            g.crateEnts?.map((c: CrateEnt) => (
-              <View key={c.id} style={{ position: "absolute", left: laneCenterX(c.lane) - 20, top: c.y }}>
-                <CrateIcon size={40} />
-              </View>
-            ))}
+          {/* moving lane dashes */}
+          {phase !== "crashed" &&
+            dividers.map((d, di) =>
+              Array.from({ length: 7 }).map((_, j) => {
+                const z = j * 40 + 6 - dashOffset;
+                if (z < 0) return null;
+                const pr = project(z, d.norm, W, H);
+                const sz = Math.max(1, 10 * pr.p);
+                return (
+                  <View
+                    key={`d-${di}-${j}`}
+                    pointerEvents="none"
+                    style={{ position: "absolute", left: pr.x - sz / 4, top: pr.y - sz, width: Math.max(2, sz / 2), height: sz * 1.6, borderRadius: 2, backgroundColor: env.line, opacity: 0.7 }}
+                  />
+                );
+              }),
+            )}
 
-          {phase === "running" &&
-            g.vehicles?.map((v: Vehicle) => (
-              <View key={v.id} style={{ position: "absolute", left: laneCenterX(v.lane) - v.w / 2, top: v.y }}>
-                <Car size={v.w} color={v.color} truck={v.truck} spin={wheelSpin} />
-              </View>
-            ))}
+          {/* scenery props (far first) */}
+          {phase !== "crashed" &&
+            [...(g.props ?? [])]
+              .sort((a: Prop, b: Prop) => b.z - a.z)
+              .map((pr: Prop) => {
+                const proj = project(pr.z, pr.side * (1.25 + 0.15), W, H);
+                if (proj.p < 0.05) return null;
+                return <SceneryProp key={pr.id} kind={pr.kind} color={pr.color} x={proj.x} y={proj.y} p={proj.p} h={pr.h} />;
+              })}
 
+          {/* entities sorted far -> near */}
+          {phase !== "crashed" &&
+            ([
+              ...(g.vehicles ?? []).map((v: Vehicle) => ({ t: "v" as const, z: v.z, v })),
+              ...(g.crateEnts ?? []).map((c: CrateEnt) => ({ t: "c" as const, z: c.z, c })),
+              ...(g.powerUps ?? []).map((pu: PowerUp) => ({ t: "p" as const, z: pu.z, pu })),
+            ] as any[])
+              .sort((a, b) => b.z - a.z)
+              .map((it) => {
+                if (it.t === "v") {
+                  const pr = project(it.v.z, laneToNorm(it.v.lane, lanes), W, H);
+                  if (pr.p < 0.04) return null;
+                  const size = W * 0.24 * pr.p;
+                  return (
+                    <View key={`v${it.v.id}`} pointerEvents="none" style={{ position: "absolute", left: pr.x - size / 2, top: pr.y - size * (it.v.truck ? 1.7 : 1.2), opacity: Math.min(1, pr.p * 3) }}>
+                      <Car size={size} color={it.v.color} truck={it.v.truck} spin={wheelSpin} />
+                    </View>
+                  );
+                }
+                if (it.t === "c") {
+                  const pr = project(it.c.z, laneToNorm(it.c.lane, lanes), W, H);
+                  if (pr.p < 0.04) return null;
+                  const size = W * 0.13 * pr.p;
+                  return (
+                    <View key={`c${it.c.id}`} pointerEvents="none" style={{ position: "absolute", left: pr.x - size / 2, top: pr.y - size, opacity: Math.min(1, pr.p * 3) }}>
+                      <CrateIcon size={size} />
+                    </View>
+                  );
+                }
+                const pr = project(it.pu.z, laneToNorm(it.pu.lane, lanes), W, H);
+                if (pr.p < 0.04) return null;
+                const size = W * 0.14 * pr.p;
+                return (
+                  <View key={`p${it.pu.id}`} pointerEvents="none" style={{ position: "absolute", left: pr.x - size / 2, top: pr.y - size, opacity: Math.min(1, pr.p * 3) }}>
+                    <PowerUpIcon kind={it.pu.kind} size={size} colors={colors} />
+                  </View>
+                );
+              })}
+
+          {/* trail */}
           {phase === "running" && trailColor ? (
             <LinearGradient
               pointerEvents="none"
               colors={[addAlpha(trailColor, 0), addAlpha(trailColor, 0.6)]}
               start={{ x: 0.5, y: 0 }}
               end={{ x: 0.5, y: 1 }}
-              style={{
-                position: "absolute",
-                width: playerW * 0.55,
-                height: 200,
-                left: g.playerX - playerW * 0.275,
-                top: playerY + playerH - playerW * 1.5 - 150,
-                borderRadius: playerW * 0.3,
-              }}
+              style={{ position: "absolute", width: playerW * 0.5, height: 170, left: playerProj.x - playerW * 0.25, top: playerProj.y - playerW * 1.4 - 130, borderRadius: playerW * 0.25 }}
             />
           ) : null}
 
+          {/* shield ring */}
+          {shieldedNow ? (
+            <View pointerEvents="none" style={{ position: "absolute", left: playerProj.x - playerW * 0.75, top: playerProj.y - playerW * 1.35, width: playerW * 1.5, height: playerW * 1.5, borderRadius: playerW * 0.75, borderWidth: 4, borderColor: addAlpha(colors.brake, 0.9), backgroundColor: addAlpha(colors.brake, 0.14) }} />
+          ) : null}
+
+          {/* player */}
           {phase !== "crashed" && (
-            <View
-              testID="run-player"
-              style={{
-                position: "absolute",
-                left: (phase === "running" ? g.playerX : laneCenterX(Math.floor(lanes / 2))) - playerW / 2,
-                top: playerY + playerH - playerW * 1.5,
-              }}
-            >
+            <View testID="run-player" pointerEvents="none" style={{ position: "absolute", left: playerProj.x - playerW / 2, top: playerProj.y - playerW * 1.35 }}>
               <PlayerBike size={playerW} boosting={invincibleNow} spin={wheelSpin} lean={phase === "running" ? g.lean ?? 0 : 0} {...bikeProps} />
             </View>
           )}
-
           {phase === "crashed" && (
-            <View
-              testID="run-player-dead"
-              style={{
-                position: "absolute",
-                left: (g.crashX ?? laneCenterX(Math.floor(lanes / 2))) - (playerW * 1.15) / 2,
-                top: playerY + playerH - playerW * 1.6,
-              }}
-            >
+            <View testID="run-player-dead" pointerEvents="none" style={{ position: "absolute", left: playerProj.x - (playerW * 1.15) / 2, top: playerProj.y - playerW * 1.45 }}>
               <PlayerBike size={playerW * 1.15} dead {...bikeProps} />
             </View>
           )}
         </View>
       </GestureDetector>
+
+      {/* combo banner */}
+      {banner && phase === "running" ? (
+        <Animated.View
+          pointerEvents="none"
+          style={[styles.bannerWrap, { top: H * 0.32, opacity: bannerAnim, transform: [{ scale: bannerAnim.interpolate({ inputRange: [0, 1], outputRange: [0.5, 1] }) }] }]}
+        >
+          <Text testID="run-combo-banner" style={styles.bannerText}>{banner.text}</Text>
+        </Animated.View>
+      ) : null}
 
       {phase === "running" && (
         <RunHUD
@@ -521,6 +632,8 @@ export default function RunScreen() {
           envName={env?.name ?? ""}
           boost={g.boostActive}
           turboReady={g.turboReady}
+          shield={shieldedNow}
+          magnet={magnetNow}
           onTurbo={useTurbo}
           onBrake={brakePulse}
           onPause={() => {
@@ -534,7 +647,7 @@ export default function RunScreen() {
         <View style={[styles.overlay, { paddingTop: insets.top }]}>
           <View style={styles.readyCard}>
             <Text style={styles.readyTitle}>GET READY!</Text>
-            <Text style={styles.readySub}>Tap or swipe left / right to change lanes.{"\n"}Swipe down to brake.</Text>
+            <Text style={styles.readySub}>Tap or swipe left / right to change lanes.{"\n"}Swipe down to brake. Grab ⚡ power-ups!</Text>
             <View style={styles.modRow}>
               <ModChip label="ABS" on={modifiers.hasABS} colors={colors} />
               <ModChip label="TURBO" on={modifiers.turbo} colors={colors} />
@@ -576,12 +689,7 @@ export default function RunScreen() {
           <View style={{ height: 14 }} />
           {coinsEarned > 0 && !coinsDoubled ? (
             <>
-              <NeonButton
-                testID="run-doublecoins-button"
-                label={`◎  DOUBLE COINS (+${coinsEarned})`}
-                variant="gold"
-                onPress={doubleCoins}
-              />
+              <NeonButton testID="run-doublecoins-button" label={`◎  DOUBLE COINS (+${coinsEarned})`} variant="gold" onPress={doubleCoins} />
               <View style={{ height: 10 }} />
             </>
           ) : null}
@@ -606,7 +714,39 @@ export default function RunScreen() {
   );
 }
 
-function RunHUD({ styles, colors, top, bottom, score, distance, multiplier, meter, envName, boost, turboReady, onTurbo, onBrake, onPause }: any) {
+function SceneryProp({ kind, color, x, y, p, h }: { kind: string; color: string; x: number; y: number; p: number; h: number }) {
+  const height = h * p;
+  const width = Math.max(6, height * (kind === "building" || kind === "tower" ? 0.55 : 0.32));
+  if (kind === "building" || kind === "tower") {
+    return (
+      <View pointerEvents="none" style={{ position: "absolute", left: x - width / 2, top: y - height, width, height, backgroundColor: color, borderColor: OUTLINE, borderWidth: Math.max(1, 2 * p), borderRadius: 3 }}>
+        <View style={{ position: "absolute", top: 3 * p, left: 3 * p, right: 3 * p, height: height * 0.18, backgroundColor: kind === "tower" ? "#FFD84D" : "rgba(255,255,255,0.35)", borderRadius: 2 }} />
+      </View>
+    );
+  }
+  // trees / cactus / palm — trunk + canopy
+  const trunkW = Math.max(3, width * 0.35);
+  const canopy = width;
+  const isSnow = kind === "pinesnow";
+  return (
+    <View pointerEvents="none" style={{ position: "absolute", left: x - canopy / 2, top: y - height, width: canopy, height, alignItems: "center", justifyContent: "flex-end" }}>
+      <View style={{ width: canopy, height: height * 0.7, backgroundColor: color, borderColor: OUTLINE, borderWidth: Math.max(1, 1.5 * p), borderRadius: kind === "palm" ? canopy / 2 : canopy * 0.28 }} />
+      {isSnow ? <View style={{ position: "absolute", top: 0, width: canopy * 0.8, height: height * 0.22, backgroundColor: "#FFFFFF", borderRadius: canopy * 0.3 }} /> : null}
+      <View style={{ width: trunkW, height: height * 0.32, backgroundColor: "#7A5A3A", borderColor: OUTLINE, borderWidth: Math.max(1, 1.2 * p) }} />
+    </View>
+  );
+}
+
+function PowerUpIcon({ kind, size, colors }: { kind: "magnet" | "shield"; size: number; colors: any }) {
+  const bg = kind === "shield" ? colors.brake : colors.neonMagenta;
+  return (
+    <View style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: bg, borderWidth: Math.max(2, size * 0.08), borderColor: OUTLINE, alignItems: "center", justifyContent: "center" }}>
+      <Text style={{ color: "#FFFFFF", fontWeight: "900", fontSize: size * 0.5 }}>{kind === "shield" ? "⛨" : "⚡"}</Text>
+    </View>
+  );
+}
+
+function RunHUD({ styles, colors, top, bottom, score, distance, multiplier, meter, envName, boost, turboReady, shield, magnet, onTurbo, onBrake, onPause }: any) {
   return (
     <>
       <View style={[styles.hudTop, { top: top + 8 }]} pointerEvents="box-none">
@@ -626,6 +766,10 @@ function RunHUD({ styles, colors, top, bottom, score, distance, multiplier, mete
         <View style={styles.meterTrack}>
           <View style={[styles.meterFill, { width: `${boost ? 100 : meter}%`, backgroundColor: boost ? colors.neonGold : colors.success }]} />
           <Text style={styles.meterLabel}>{boost ? "SLIPSTREAM BOOST!" : "SLIPSTREAM"}</Text>
+        </View>
+        <View style={styles.puRow}>
+          {shield ? <View style={[styles.puChip, { backgroundColor: colors.brake }]}><Text style={styles.puChipText}>⛨ SHIELD</Text></View> : null}
+          {magnet ? <View style={[styles.puChip, { backgroundColor: colors.neonMagenta }]}><Text style={styles.puChipText}>⚡ MAGNET</Text></View> : null}
         </View>
       </View>
 
@@ -664,8 +808,18 @@ function SumStat({ label, value, colors }: { label: string; value: string; color
 
 const useStyles = makeStyles((colors) => ({
   container: { flex: 1, backgroundColor: colors.surface },
-  bg: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0 },
   playArea: { flex: 1 },
+  sun: { position: "absolute", alignSelf: "center", width: 84, height: 84, borderRadius: 42, opacity: 0.9 },
+  bannerWrap: { position: "absolute", left: 0, right: 0, alignItems: "center" },
+  bannerText: {
+    color: "#FFFFFF",
+    fontSize: 40,
+    fontWeight: "900",
+    letterSpacing: 1,
+    textShadowColor: OUTLINE,
+    textShadowOffset: { width: 3, height: 3 },
+    textShadowRadius: 1,
+  },
   hudTop: { position: "absolute", left: 14, right: 14, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   pauseBtn: { width: 46, height: 46, borderRadius: 14, backgroundColor: colors.surfaceSecondary, alignItems: "center", justifyContent: "center", borderWidth: 3, borderColor: OUTLINE, borderBottomWidth: 5 },
   pauseText: { color: colors.onSurface, fontSize: 20, fontWeight: "900" },
@@ -678,6 +832,9 @@ const useStyles = makeStyles((colors) => ({
   meterTrack: { width: "100%", height: 26, borderRadius: 14, backgroundColor: colors.surfaceSecondary, overflow: "hidden", borderWidth: 3, borderColor: OUTLINE, justifyContent: "center" },
   meterFill: { position: "absolute", left: 0, top: 0, bottom: 0 },
   meterLabel: { textAlign: "center", color: colors.onSurface, fontSize: 11, fontWeight: "900", letterSpacing: 1 },
+  puRow: { flexDirection: "row", gap: 8, marginTop: 8, justifyContent: "center" },
+  puChip: { borderRadius: 10, borderWidth: 2, borderColor: OUTLINE, paddingHorizontal: 10, paddingVertical: 3 },
+  puChipText: { color: "#FFFFFF", fontWeight: "900", fontSize: 11 },
   hudBottom: { position: "absolute", left: 20, right: 20, flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   ctrlBtn: { width: 100, height: 54, borderRadius: 16, borderWidth: 3, borderColor: OUTLINE, borderBottomWidth: 6, alignItems: "center", justifyContent: "center" },
   ctrlText: { color: "#FFFFFF", fontWeight: "900", fontSize: 15, letterSpacing: 1 },

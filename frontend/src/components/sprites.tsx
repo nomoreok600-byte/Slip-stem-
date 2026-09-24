@@ -88,6 +88,12 @@ export function PlayerBike({
       {model === "chopper" ? <Rect x={41} y={102} width={18} height={8} rx={4} fill="#C9CDD3" stroke={OUTLINE} strokeWidth={2} /> : null}
       {model === "neon" ? <Rect x={44} y={96} width={12} height={8} rx={4} fill="#00E5FF" /> : null}
       {model === "moto" ? <Circle cx={50} cy={82} r={7} fill="#FFFFFF" stroke={OUTLINE} strokeWidth={2} /> : null}
+      {model === "phantom" ? (
+        <>
+          <Path d="M40 36 Q50 28 60 36 L58 104 Q50 108 42 104 Z" fill="none" stroke="#FF2D95" strokeWidth={2.5} />
+          <Rect x={45} y={44} width={10} height={4} rx={2} fill="#FF2D95" />
+        </>
+      ) : null}
       {/* handlebar */}
       <Line x1={28} y1={42} x2={72} y2={42} stroke="#2C2A2E" strokeWidth={5} strokeLinecap="round" />
       {/* arms (outfit) */}

@@ -7,6 +7,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { IMAGES } from "@/src/assets";
 import { useSound } from "@/src/audio";
 import { DailyChallengeCard } from "@/src/components/daily-challenge";
+import { WeeklyChallengeCard } from "@/src/components/weekly-challenge";
 import { CoinIcon, PlayerBike } from "@/src/components/sprites";
 import { NeonButton } from "@/src/components/ui";
 import { bikeById } from "@/src/game/constants";
@@ -116,6 +117,7 @@ export default function Home() {
 
         {/* daily challenge */}
         <DailyChallengeCard />
+        <WeeklyChallengeCard />
 
         {/* actions */}
         <NeonButton testID="home-ride-button" label="🏍  START RIDE" onPress={() => go("/run")} style={{ marginTop: 4 }} />

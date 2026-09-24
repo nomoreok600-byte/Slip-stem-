@@ -11,7 +11,7 @@ import React, {
 
 import { storage } from "@/src/utils/storage";
 
-import { CRATE_MAX_MS, CRATE_MIN_MS, HIGHER_TIER_MAX, UPGRADE_COST, bikeById, charById } from "./constants";
+import { CRATE_MAX_MS, CRATE_MIN_MS, HIGHER_TIER_MAX, REWARD_BIKE, UPGRADE_COST, WEEKLY_REWARD, bikeById, charById } from "./constants";
 import {
   addToLeaderboard,
   applyDrop,
@@ -27,11 +27,13 @@ import {
   initialState,
   isStuck,
   makeDaily,
+  makeWeekly,
   refreshGrid as refreshGridLogic,
   resetGridForExport,
   resizeGrid,
   todayKey,
   uid,
+  weekKey,
   yesterdayKey,
 } from "./logic";
 import type { BikeModel, ColorSlot, GameState, RunResult } from "./types";
@@ -41,7 +43,9 @@ const STORAGE_KEY = "slipstream.save.v1";
 type Action =
   | { type: "hydrate"; state: GameState }
   | { type: "ensureDaily" }
+  | { type: "ensureWeekly" }
   | { type: "claimDaily" }
+  | { type: "claimWeekly" }
   | { type: "recordRun"; result: RunResult }
   | { type: "clearRunsSinceAd" }
   | { type: "openCrate"; crateId: string }
@@ -70,6 +74,27 @@ function reducer(state: GameState, action: Action): GameState {
       if (state.daily.dayKey === today) return state;
       // new day -> fresh goal, keep streak (reset happens at claim time if broken)
       return { ...state, daily: makeDaily(today, state.daily.streak, state.daily.lastClaimDay) };
+    }
+
+    case "ensureWeekly": {
+      const wk = weekKey();
+      if (state.weekly?.weekKey === wk) return state;
+      return { ...state, weekly: makeWeekly(wk) };
+    }
+
+    case "claimWeekly": {
+      const w = state.weekly;
+      if (!w || w.claimed || w.progress < w.target) return state;
+      const owned = state.cosmetics.ownedBikes.includes(REWARD_BIKE)
+        ? state.cosmetics.ownedBikes
+        : [...state.cosmetics.ownedBikes, REWARD_BIKE];
+      return {
+        ...state,
+        coins: state.coins + WEEKLY_REWARD.coins,
+        tokens: state.tokens + WEEKLY_REWARD.tokens,
+        weekly: { ...w, claimed: true },
+        cosmetics: { ...state.cosmetics, ownedBikes: owned },
+      };
     }
 
     case "claimDaily": {
@@ -113,11 +138,20 @@ function reducer(state: GameState, action: Action): GameState {
         else if (d.type === "runs") progress += 1;
       }
       const coinsEarned = coinsForRun(result.distance, result.cratesCollected);
+      const w = state.weekly ?? makeWeekly(weekKey());
+      let wProgress = w.progress;
+      if (!w.claimed) {
+        if (w.type === "distance") wProgress += result.distance;
+        else if (w.type === "score") wProgress += result.score;
+        else if (w.type === "runs") wProgress += 1;
+        else if (w.type === "crates") wProgress += result.cratesCollected;
+      }
       return {
         ...state,
         coins: state.coins + coinsEarned,
         crates: [...state.crates, ...newCrates],
         daily: { ...d, progress },
+        weekly: { ...w, progress: wProgress },
         leaderboard: addToLeaderboard(state.leaderboard ?? [], result),
         stats: {
           ...state.stats,
@@ -234,6 +268,7 @@ function reducer(state: GameState, action: Action): GameState {
         return { ...state, cosmetics: { ...c, selectedBike: action.id } };
       }
       const def = bikeById(action.id);
+      if (def.rewardOnly || def.cost < 0) return state; // reward-only bikes can't be bought
       if (state.coins < def.cost) return state;
       return {
         ...state,
@@ -304,6 +339,7 @@ type GameContextValue = {
   recordRun: (result: RunResult) => void;
   clearRunsSinceAd: () => void;
   claimDaily: () => void;
+  claimWeekly: () => void;
   openCrate: (crateId: string) => void;
   openCrateCoins: (crateId: string) => void;
   rushCrate: (crateId: string) => void;
@@ -341,6 +377,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
               ...parsed,
               coins: parsed.coins ?? 0,
               daily: parsed.daily ?? base.daily,
+              weekly: parsed.weekly ?? base.weekly,
               upgrades: { ...base.upgrades, ...(parsed.upgrades ?? {}) },
               stats: { ...base.stats, ...(parsed.stats ?? {}) },
               cosmetics: { ...base.cosmetics, ...(parsed.cosmetics ?? {}) },
@@ -354,6 +391,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       }
       hydrated.current = true;
       dispatch({ type: "ensureDaily" });
+      dispatch({ type: "ensureWeekly" });
       if (alive) setReady(true);
     })();
     return () => {
@@ -374,6 +412,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       recordRun: (result) => dispatch({ type: "recordRun", result }),
       clearRunsSinceAd: () => dispatch({ type: "clearRunsSinceAd" }),
       claimDaily: () => dispatch({ type: "claimDaily" }),
+      claimWeekly: () => dispatch({ type: "claimWeekly" }),
       openCrate: (crateId) => dispatch({ type: "openCrate", crateId }),
       openCrateCoins: (crateId) => dispatch({ type: "openCrateCoins", crateId, cost: COIN_OPEN_COST }),
       rushCrate: (crateId) => dispatch({ type: "rushCrate", crateId }),

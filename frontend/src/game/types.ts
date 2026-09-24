@@ -32,6 +32,7 @@ export type GameState = {
   tokens: number;
   coins: number;
   daily: Daily;
+  weekly: Weekly;
   upgrades: Upgrades;
   stats: Stats;
   cosmetics: Cosmetics;
@@ -48,6 +49,16 @@ export type Daily = {
   claimed: boolean;
   streak: number;
   lastClaimDay: string | null;
+};
+
+export type WeeklyGoalType = "distance" | "score" | "runs" | "crates";
+
+export type Weekly = {
+  weekKey: string; // YYYY-Www
+  type: WeeklyGoalType;
+  target: number;
+  progress: number;
+  claimed: boolean;
 };
 
 export type RunResult = {
@@ -82,7 +93,7 @@ export type RunModifiers = {
 };
 
 // ---------- Cosmetics / shop ----------
-export type BikeModel = "street" | "sport" | "cruiser" | "chopper" | "neon" | "moto";
+export type BikeModel = "street" | "sport" | "cruiser" | "chopper" | "neon" | "moto" | "phantom";
 
 export type BikeDef = {
   id: BikeModel;
@@ -94,6 +105,7 @@ export type BikeDef = {
   braking: number;
   desc: string;
   trail?: string; // colored speed trail for premium bikes
+  rewardOnly?: boolean; // unlocked via weekly challenge, not buyable
 };
 
 export type CharacterDef = {

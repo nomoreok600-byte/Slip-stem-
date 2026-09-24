@@ -66,9 +66,12 @@ export const RUN = {
 };
 
 export const ENVIRONMENTS = [
-  { key: "city", name: "Neon City", rain: false },
-  { key: "desert", name: "Desert Highway", rain: false },
-  { key: "rain", name: "Rainy Pass", rain: true },
+  { key: "city", name: "Neon City", rain: false, skyTop: "#FF9E4D", skyBot: "#FFE3A8", ground: "#C9A24B", road: "#5A5560", line: "#FFF3D6", prop: "building", propColors: ["#5A6B8C", "#6C5A8C", "#4A7C8C"] },
+  { key: "desert", name: "Desert Highway", rain: false, skyTop: "#FF8A3D", skyBot: "#FFE0A0", ground: "#E8C271", road: "#7C6B54", line: "#FFF3D6", prop: "cactus", propColors: ["#5F9E5A", "#4E8C49"] },
+  { key: "rain", name: "Rainy Pass", rain: true, skyTop: "#5B6B7C", skyBot: "#9FB0C0", ground: "#6B7A6B", road: "#48505A", line: "#DDE6EE", prop: "pine", propColors: ["#3A6B4A", "#2E5C3E"] },
+  { key: "beach", name: "Sunny Beach", rain: false, skyTop: "#3FB6E0", skyBot: "#CFF3FF", ground: "#F2D89A", road: "#6E7B86", line: "#FFF3D6", prop: "palm", propColors: ["#4E8C49", "#5F9E5A"] },
+  { key: "snow", name: "Frost Peaks", rain: false, skyTop: "#8FB8D8", skyBot: "#EAF4FF", ground: "#EDF2F7", road: "#586070", line: "#DDE6EE", prop: "pinesnow", propColors: ["#3A6B4A", "#FFFFFF"] },
+  { key: "night", name: "Night City", rain: false, skyTop: "#191d38", skyBot: "#3A2E5C", ground: "#241f34", road: "#3A3550", line: "#FFD84D", prop: "tower", propColors: ["#3A4C7C", "#5A3A7C", "#2A6C8C"] },
 ] as const;
 
 // ---- Cosmetics: bikes, riders, paint ----
@@ -79,7 +82,13 @@ export const BIKES: BikeDef[] = [
   { id: "chopper", name: "Chopper X", cost: 4200, color: "#FF8A3D", speed: 8, handling: 2, braking: 10, desc: "Big-bore boulevard bruiser.", trail: "#FF8A3D" },
   { id: "neon", name: "Neon Blade", cost: 7000, color: "#B06BFF", speed: 14, handling: 10, braking: 4, desc: "Electric hyper-naked.", trail: "#00E5FF" },
   { id: "moto", name: "Moto GP", cost: 12000, color: "#FFC02E", speed: 18, handling: 14, braking: 8, desc: "Factory prototype racer.", trail: "#FFC02E" },
+  { id: "phantom", name: "Phantom", cost: -1, color: "#111318", speed: 20, handling: 18, braking: 14, desc: "Exclusive weekly-reward hyperbike.", trail: "#FF2D95", rewardOnly: true },
 ];
+
+export const REWARD_BIKE: BikeModel = "phantom";
+
+// ---- Weekly challenge ----
+export const WEEKLY_REWARD = { coins: 2000, tokens: 15 };
 
 export const CHARACTERS: CharacterDef[] = [
   { id: "rookie", name: "Rookie", cost: 0, skin: "#E9B48C", outfit: "#FF7A3D", helmet: "#F2F4F7", desc: "Every legend starts here." },
