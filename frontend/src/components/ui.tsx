@@ -1,13 +1,32 @@
-import { LinearGradient } from "expo-linear-gradient";
 import React from "react";
 import { Pressable, StyleProp, Text, TextStyle, View, ViewStyle } from "react-native";
 
-import { FAMILY_GLYPH, PART_NAMES } from "@/src/game/constants";
+import { PartIcon } from "@/src/components/sprites";
+import { PART_NAMES } from "@/src/game/constants";
 import type { Family } from "@/src/game/types";
 import { makeStyles, useTheme } from "@/src/theme";
 
-type ButtonVariant = "primary" | "secondary" | "ghost" | "gold";
+const OUTLINE = "#3A2E1E";
 
+export function addAlpha(hex: string, alpha: number): string {
+  const h = hex.replace("#", "");
+  const r = parseInt(h.substring(0, 2), 16);
+  const g = parseInt(h.substring(2, 4), 16);
+  const b = parseInt(h.substring(4, 6), 16);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+
+export function darken(hex: string, f = 0.72): string {
+  const h = hex.replace("#", "");
+  const r = Math.round(parseInt(h.substring(0, 2), 16) * f);
+  const g = Math.round(parseInt(h.substring(2, 4), 16) * f);
+  const b = Math.round(parseInt(h.substring(4, 6), 16) * f);
+  return `rgb(${r},${g},${b})`;
+}
+
+type ButtonVariant = "primary" | "secondary" | "ghost" | "gold" | "success";
+
+// Chunky cartoon button with a 3D bottom lip that presses down.
 export function NeonButton({
   label,
   onPress,
@@ -23,40 +42,57 @@ export function NeonButton({
   testID?: string;
   style?: StyleProp<ViewStyle>;
 }) {
-  const styles = useStyles();
   const { colors } = useTheme();
-  const gradients: Record<ButtonVariant, string[]> = {
-    primary: [colors.neonCyan, colors.info],
-    secondary: [colors.neonMagenta, colors.neonPurple],
-    gold: [colors.neonGold, colors.warning],
-    ghost: ["transparent", "transparent"],
+  const faces: Record<ButtonVariant, string> = {
+    primary: colors.brandPrimary,
+    secondary: colors.brandSecondary,
+    gold: colors.neonGold,
+    success: colors.success,
+    ghost: colors.surfaceSecondary,
   };
+  const face = faces[variant];
+  const lip = variant === "ghost" ? colors.border : darken(face, 0.7);
   const textColor =
-    variant === "ghost" ? colors.onSurface : variant === "gold" ? colors.onCrate : colors.onBrand;
+    variant === "ghost"
+      ? colors.onSurface
+      : variant === "gold"
+        ? colors.onCrate
+        : variant === "success"
+          ? colors.onSuccess
+          : "#FFFFFF";
 
   return (
     <Pressable
       testID={testID}
       onPress={onPress}
       disabled={disabled}
-      style={({ pressed }) => [
-        styles.btnWrap,
-        variant === "ghost" && styles.ghostWrap,
-        disabled && styles.disabled,
-        pressed && styles.pressed,
-        style,
-      ]}
+      style={({ pressed }) => [{ opacity: disabled ? 0.5 : 1 }, style]}
     >
-      <LinearGradient
-        colors={gradients[variant] as [string, string]}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={styles.btnInner}
-      >
-        <Text style={[styles.btnText, { color: textColor }]} numberOfLines={1}>
-          {label}
-        </Text>
-      </LinearGradient>
+      {({ pressed }) => (
+        <View
+          style={{
+            backgroundColor: face,
+            borderRadius: 18,
+            borderWidth: 3,
+            borderColor: OUTLINE,
+            borderBottomWidth: pressed ? 3 : 7,
+            marginTop: pressed ? 4 : 0,
+            paddingVertical: 15,
+            paddingHorizontal: 20,
+            alignItems: "center",
+            justifyContent: "center",
+            minHeight: 54,
+          }}
+        >
+          <View style={{ position: "absolute", left: 3, right: 3, top: 3, height: "45%", borderTopLeftRadius: 13, borderTopRightRadius: 13, backgroundColor: "rgba(255,255,255,0.22)" }} />
+          <Text
+            numberOfLines={1}
+            style={{ color: textColor, fontSize: 17, fontWeight: "900", letterSpacing: 0.4 }}
+          >
+            {label}
+          </Text>
+        </View>
+      )}
     </Pressable>
   );
 }
@@ -64,47 +100,38 @@ export function NeonButton({
 export function GlowCard({
   children,
   style,
-  glow,
 }: {
   children: React.ReactNode;
   style?: StyleProp<ViewStyle>;
   glow?: string;
 }) {
   const styles = useStyles();
-  return <View style={[styles.card, glow ? { shadowColor: glow } : null, style]}>{children}</View>;
+  return <View style={[styles.card, style]}>{children}</View>;
 }
 
-export function SectionTitle({ children, style }: { children: React.ReactNode; style?: StyleProp<TextStyle> }) {
+export function SectionTitle({
+  children,
+  style,
+}: {
+  children: React.ReactNode;
+  style?: StyleProp<TextStyle>;
+}) {
   const styles = useStyles();
   return <Text style={[styles.section, style]}>{children}</Text>;
 }
 
-export function StatBar({
-  label,
-  value,
-  color,
-}: {
-  label: string;
-  value: number; // 0..100
-  color: string;
-}) {
+export function StatBar({ label, value, color }: { label: string; value: number; color: string }) {
   const styles = useStyles();
   return (
     <View style={styles.statRow}>
       <Text style={styles.statLabel}>{label}</Text>
       <View style={styles.statTrack}>
-        <View style={[styles.statFill, { width: `${Math.max(3, Math.min(100, value))}%`, backgroundColor: color }]} />
+        <View style={[styles.statFill, { width: `${Math.max(4, Math.min(100, value))}%`, backgroundColor: color }]} />
       </View>
       <Text style={styles.statValue}>{Math.round(value)}</Text>
     </View>
   );
 }
-
-const FAMILY_COLOR_KEY: Record<Family, "engine" | "brake" | "aero"> = {
-  engine: "engine",
-  brake: "brake",
-  aero: "aero",
-};
 
 export function PartTile({
   family,
@@ -118,120 +145,97 @@ export function PartTile({
   compact?: boolean;
 }) {
   const { colors } = useTheme();
-  const bg = colors[FAMILY_COLOR_KEY[family]];
-  const onBg =
-    family === "engine" ? colors.onEngine : family === "brake" ? colors.onBrake : colors.onAero;
+  const border = colors[family];
   return (
-    <LinearGradient
-      colors={[bg, addAlpha(bg, 0.55)]}
-      start={{ x: 0, y: 0 }}
-      end={{ x: 1, y: 1 }}
+    <View
       style={{
         width: size,
         height: size,
-        borderRadius: Math.round(size * 0.22),
+        borderRadius: Math.round(size * 0.24),
+        backgroundColor: "#FFFFFF",
+        borderWidth: 3,
+        borderColor: OUTLINE,
+        borderBottomWidth: 5,
         alignItems: "center",
         justifyContent: "center",
-        borderWidth: 1.5,
-        borderColor: addAlpha(bg, 0.9),
-        shadowColor: bg,
-        shadowOpacity: 0.9,
-        shadowRadius: 10,
-        shadowOffset: { width: 0, height: 0 },
       }}
     >
-      <Text style={{ color: onBg, fontWeight: "900", fontSize: Math.max(10, size * 0.19) }}>
-        {FAMILY_GLYPH[family]}
-      </Text>
       <View
         style={{
-          marginTop: 3,
-          backgroundColor: onBg,
+          position: "absolute",
+          top: 4,
+          left: 4,
+          right: 4,
+          bottom: 4,
+          borderRadius: Math.round(size * 0.2),
+          borderWidth: 2,
+          borderColor: addAlpha(border, 0.4),
+        }}
+      />
+      <PartIcon family={family} size={size * 0.5} />
+      <View
+        style={{
+          position: "absolute",
+          top: 3,
+          right: 3,
+          backgroundColor: border,
           borderRadius: 8,
-          paddingHorizontal: 7,
-          paddingVertical: 1,
+          borderWidth: 2,
+          borderColor: OUTLINE,
+          paddingHorizontal: 5,
+          paddingVertical: 0,
         }}
       >
-        <Text style={{ color: bg, fontWeight: "900", fontSize: Math.max(9, size * 0.16) }}>
-          L{level}
+        <Text style={{ color: "#FFFFFF", fontWeight: "900", fontSize: Math.max(9, size * 0.14) }}>
+          {level}
         </Text>
       </View>
       {!compact ? (
         <Text
           numberOfLines={1}
-          style={{ color: onBg, fontSize: Math.max(7, size * 0.11), marginTop: 2, opacity: 0.85 }}
+          style={{
+            position: "absolute",
+            bottom: 4,
+            color: colors.onSurfaceTertiary,
+            fontSize: Math.max(7, size * 0.1),
+            fontWeight: "700",
+          }}
         >
           {PART_NAMES[family][level]}
         </Text>
       ) : null}
-    </LinearGradient>
+    </View>
   );
 }
 
-// naive hex -> rgba helper for glow variants
-export function addAlpha(hex: string, alpha: number): string {
-  const h = hex.replace("#", "");
-  const r = parseInt(h.substring(0, 2), 16);
-  const g = parseInt(h.substring(2, 4), 16);
-  const b = parseInt(h.substring(4, 6), 16);
-  return `rgba(${r},${g},${b},${alpha})`;
-}
-
 const useStyles = makeStyles((colors) => ({
-  btnWrap: {
-    borderRadius: 16,
-    overflow: "hidden",
-    shadowColor: colors.neonCyan,
-    shadowOpacity: 0.5,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: 4 },
-  },
-  ghostWrap: {
-    borderWidth: 1.5,
-    borderColor: colors.borderStrong,
-    shadowOpacity: 0,
-  },
-  btnInner: {
-    paddingVertical: 16,
-    paddingHorizontal: 22,
-    alignItems: "center",
-    justifyContent: "center",
-    minHeight: 54,
-  },
-  btnText: {
-    fontSize: 16,
-    fontWeight: "900",
-    letterSpacing: 0.5,
-  },
-  disabled: { opacity: 0.4 },
-  pressed: { opacity: 0.85, transform: [{ scale: 0.98 }] },
   card: {
     backgroundColor: colors.surfaceSecondary,
     borderRadius: 20,
     padding: 16,
-    borderWidth: 1,
-    borderColor: colors.border,
-    shadowOpacity: 0.35,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 0 },
+    borderWidth: 3,
+    borderColor: OUTLINE,
+    borderBottomWidth: 6,
   },
   section: {
     color: colors.onSurface,
-    fontSize: 18,
+    fontSize: 19,
     fontWeight: "900",
-    letterSpacing: 0.5,
+    letterSpacing: 0.3,
     marginBottom: 12,
   },
   statRow: { flexDirection: "row", alignItems: "center", marginVertical: 5 },
-  statLabel: { color: colors.onSurfaceTertiary, width: 74, fontSize: 12, fontWeight: "700" },
+  statLabel: { color: colors.onSurfaceTertiary, width: 74, fontSize: 12, fontWeight: "800" },
   statTrack: {
     flex: 1,
-    height: 10,
+    height: 14,
     backgroundColor: colors.surfaceTertiary,
-    borderRadius: 6,
+    borderRadius: 8,
     overflow: "hidden",
     marginHorizontal: 10,
+    borderWidth: 2,
+    borderColor: OUTLINE,
   },
-  statFill: { height: "100%", borderRadius: 6 },
-  statValue: { color: colors.onSurface, width: 30, textAlign: "right", fontSize: 12, fontWeight: "800" },
+  statFill: { height: "100%" },
+  statValue: { color: colors.onSurface, width: 30, textAlign: "right", fontSize: 13, fontWeight: "900" },
 }));

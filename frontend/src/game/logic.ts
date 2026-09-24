@@ -3,6 +3,8 @@ import type {
   BikeSpec,
   Cell,
   Crate,
+  Daily,
+  DailyGoalType,
   Family,
   GameState,
   Part,
@@ -40,6 +42,8 @@ export function initialState(): GameState {
     gridSize: size,
     crates: [],
     tokens: 0,
+    coins: 0,
+    daily: makeDaily(todayKey(), 0, null),
     upgrades: { grid5: false, scoreMult: 0, handling: 0, higherTier: 0 },
     stats: {
       bestScore: 0,
@@ -50,6 +54,61 @@ export function initialState(): GameState {
       exports: 0,
     },
   };
+}
+
+// ---------- Daily challenge ----------
+export function todayKey(d = new Date()): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+export function yesterdayKey(): string {
+  const d = new Date();
+  d.setDate(d.getDate() - 1);
+  return todayKey(d);
+}
+
+function hashKey(s: string): number {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+  return h;
+}
+
+const GOAL_TYPES: DailyGoalType[] = ["score", "distance", "crates", "runs"];
+
+export function makeDaily(dayKey: string, streak: number, lastClaimDay: string | null): Daily {
+  const h = hashKey(dayKey);
+  const type = GOAL_TYPES[h % GOAL_TYPES.length];
+  const target =
+    type === "score"
+      ? 600 + (h % 5) * 200
+      : type === "distance"
+        ? 1500 + (h % 5) * 500
+        : type === "crates"
+          ? 4 + (h % 4)
+          : 3 + (h % 3);
+  return { dayKey, type, target, progress: 0, claimed: false, streak, lastClaimDay };
+}
+
+export function dailyLabel(d: Daily): string {
+  switch (d.type) {
+    case "score":
+      return `Score ${d.target.toLocaleString()} in a single run`;
+    case "distance":
+      return `Ride ${d.target.toLocaleString()}m total today`;
+    case "crates":
+      return `Collect ${d.target} crates today`;
+    case "runs":
+      return `Complete ${d.target} runs today`;
+  }
+}
+
+export function dailyRewards(streak: number): { tokens: number; coins: number; crate: boolean } {
+  const s = Math.max(1, streak);
+  return { tokens: 3 + Math.min(s, 7), coins: 150 + s * 25, crate: s % 3 === 0 };
+}
+
+export function coinsForRun(distance: number, crates: number): number {
+  return Math.floor(distance / 8) + crates * 5;
 }
 
 export function firstEmptyIndex(grid: Cell[]): number {

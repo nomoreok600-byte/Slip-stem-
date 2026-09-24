@@ -1,5 +1,4 @@
 import * as Haptics from "expo-haptics";
-import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Platform, Pressable, ScrollView, Text, useWindowDimensions, View } from "react-native";
@@ -13,10 +12,13 @@ import Animated, {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useAds } from "@/src/ads";
+import { useSound } from "@/src/audio";
 import { useToast } from "@/src/components/toast";
+import { CoinIcon, CrateIcon } from "@/src/components/sprites";
 import { GlowCard, NeonButton, PartTile, SectionTitle, StatBar, addAlpha } from "@/src/components/ui";
 import { emptyCount } from "@/src/game/logic";
 import {
+  COIN_OPEN_COST,
   canExport,
   exportTokens,
   isStuck,
@@ -26,16 +28,19 @@ import {
 import type { Cell } from "@/src/game/types";
 import { makeStyles, useTheme } from "@/src/theme";
 
+const OUTLINE = "#3A2E1E";
+
 export default function Garage() {
   const router = useRouter();
   const styles = useStyles();
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
-  const { state, drop, openCrate, rushCrate, refreshGrid, exportBike } = useGame();
+  const { state, drop, openCrate, openCrateCoins, rushCrate, refreshGrid, exportBike } = useGame();
   const spec = useBikeSpec();
   const ads = useAds();
   const toast = useToast();
+  const sound = useSound();
 
   const [now, setNow] = useState(Date.now());
   useEffect(() => {
@@ -62,10 +67,11 @@ export default function Garage() {
       const b = state.grid[to];
       drop(from, to);
       if (a && b && a.family === b.family && a.level === b.level) {
+        sound.play("merge");
         if (Platform.OS !== "web") Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       }
     },
-    [state.grid, drop],
+    [state.grid, drop, sound],
   );
 
   const handleOpen = useCallback(
@@ -74,10 +80,28 @@ export default function Garage() {
         toast.show("Grid is full — merge or refresh first", "error");
         return;
       }
+      sound.play("coin");
       openCrate(crateId);
       toast.show("Crate opened — parts dropped!", "success");
     },
-    [empties, openCrate, toast],
+    [empties, openCrate, toast, sound],
+  );
+
+  const handleCoinOpen = useCallback(
+    (crateId: string) => {
+      if (empties <= 0) {
+        toast.show("Grid is full — merge or refresh first", "error");
+        return;
+      }
+      if (state.coins < COIN_OPEN_COST) {
+        toast.show(`Need ${COIN_OPEN_COST} coins`, "error");
+        return;
+      }
+      sound.play("coin");
+      openCrateCoins(crateId);
+      toast.show("Crate opened with coins!", "success");
+    },
+    [empties, state.coins, openCrateCoins, toast, sound],
   );
 
   const handleRush = useCallback(
@@ -122,8 +146,14 @@ export default function Garage() {
           <Text style={styles.backText}>‹</Text>
         </Pressable>
         <Text style={styles.headerTitle}>GARAGE</Text>
-        <View style={styles.tokenPill}>
-          <Text style={styles.tokenText}>◆ {state.tokens}</Text>
+        <View style={styles.pillRow}>
+          <View style={styles.coinPill}>
+            <CoinIcon size={16} />
+            <Text style={styles.coinText}>{state.coins}</Text>
+          </View>
+          <View style={styles.tokenPill}>
+            <Text style={styles.tokenText}>◆ {state.tokens}</Text>
+          </View>
         </View>
       </View>
 
@@ -165,14 +195,12 @@ export default function Garage() {
               const remain = Math.max(0, Math.ceil((c.readyAt - now) / 1000));
               return (
                 <View key={c.id} style={styles.crateCard} testID={`crate-${c.id}`}>
-                  <LinearGradient
-                    colors={[colors.crate, colors.warning]}
-                    style={styles.crateIcon}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
-                  >
-                    <Text style={styles.crateTier}>T{c.tier}</Text>
-                  </LinearGradient>
+                  <View style={styles.crateIcon}>
+                    <CrateIcon size={48} />
+                    <View style={styles.tierBadge}>
+                      <Text style={styles.crateTier}>T{c.tier}</Text>
+                    </View>
+                  </View>
                   {ready ? (
                     <Pressable
                       testID={`crate-open-${c.id}`}
@@ -187,10 +215,17 @@ export default function Garage() {
                       <Pressable
                         testID={`crate-rush-${c.id}`}
                         onPress={() => handleRush(c.id)}
-                        style={[styles.crateBtn, { backgroundColor: colors.neonMagenta }]}
+                        style={[styles.crateBtn, { backgroundColor: colors.brandSecondary }]}
                       >
-                        <Text style={[styles.crateBtnText, { color: colors.onBrandSecondary }]}>
-                          ◎ RUSH
+                        <Text style={[styles.crateBtnText, { color: "#FFFFFF" }]}>◎ RUSH</Text>
+                      </Pressable>
+                      <Pressable
+                        testID={`crate-coin-${c.id}`}
+                        onPress={() => handleCoinOpen(c.id)}
+                        style={[styles.crateBtn, { backgroundColor: colors.neonGold, marginTop: 6 }]}
+                      >
+                        <Text style={[styles.crateBtnText, { color: colors.onCrate }]}>
+                          ◆ {COIN_OPEN_COST}
                         </Text>
                       </Pressable>
                     </>
@@ -400,79 +435,102 @@ const useStyles = makeStyles((colors) => ({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 20,
+    paddingHorizontal: 18,
     paddingBottom: 14,
     backgroundColor: colors.surface,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.divider,
+    borderBottomWidth: 3,
+    borderBottomColor: OUTLINE,
   },
   backBtn: {
     width: 44,
     height: 44,
-    borderRadius: 12,
+    borderRadius: 14,
     backgroundColor: colors.surfaceSecondary,
     alignItems: "center",
     justifyContent: "center",
-    borderWidth: 1,
-    borderColor: colors.border,
+    borderWidth: 3,
+    borderColor: OUTLINE,
+    borderBottomWidth: 5,
   },
   backText: { color: colors.onSurface, fontSize: 28, fontWeight: "900", marginTop: -4 },
-  headerTitle: { color: colors.onSurface, fontSize: 22, fontWeight: "900", letterSpacing: 3 },
-  tokenPill: {
-    borderRadius: 20,
-    paddingHorizontal: 14,
-    paddingVertical: 9,
-    backgroundColor: addAlpha(colors.neonGold, 0.16),
-    borderWidth: 1,
-    borderColor: colors.neonGold,
+  headerTitle: { color: colors.onSurface, fontSize: 22, fontWeight: "900", letterSpacing: 2 },
+  pillRow: { flexDirection: "row", gap: 8, alignItems: "center" },
+  coinPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    borderRadius: 16,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    backgroundColor: colors.surfaceSecondary,
+    borderWidth: 3,
+    borderColor: OUTLINE,
+    borderBottomWidth: 5,
   },
-  tokenText: { color: colors.neonGold, fontWeight: "900", fontSize: 14 },
-  cardHeading: { color: colors.muted, fontSize: 12, fontWeight: "800", letterSpacing: 2 },
+  coinText: { color: colors.onSurface, fontWeight: "900", fontSize: 13 },
+  tokenPill: {
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: colors.neonGold,
+    borderWidth: 3,
+    borderColor: OUTLINE,
+    borderBottomWidth: 5,
+  },
+  tokenText: { color: colors.onCrate, fontWeight: "900", fontSize: 14 },
+  cardHeading: { color: colors.muted, fontSize: 12, fontWeight: "900", letterSpacing: 2 },
   specHead: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 },
   tags: { flexDirection: "row", gap: 6 },
-  emptyText: { color: colors.onSurfaceTertiary, fontSize: 14, lineHeight: 20 },
+  emptyText: { color: colors.onSurfaceTertiary, fontSize: 14, lineHeight: 20, fontWeight: "600" },
   crateCard: {
-    width: 108,
+    width: 118,
     backgroundColor: colors.surfaceSecondary,
     borderRadius: 16,
     padding: 12,
     alignItems: "center",
-    borderWidth: 1,
-    borderColor: colors.border,
+    borderWidth: 3,
+    borderColor: OUTLINE,
+    borderBottomWidth: 6,
   },
-  crateIcon: {
-    width: 54,
-    height: 54,
-    borderRadius: 12,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 8,
+  crateIcon: { width: 54, height: 54, alignItems: "center", justifyContent: "center", marginBottom: 8 },
+  tierBadge: {
+    position: "absolute",
+    bottom: -2,
+    right: -2,
+    backgroundColor: colors.neonGold,
+    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: OUTLINE,
+    paddingHorizontal: 5,
   },
-  crateTier: { color: colors.onCrate, fontWeight: "900", fontSize: 16 },
-  crateTimer: { color: colors.onSurfaceTertiary, fontWeight: "800", fontSize: 13, marginBottom: 6 },
+  crateTier: { color: colors.onCrate, fontWeight: "900", fontSize: 11 },
+  crateTimer: { color: colors.onSurfaceTertiary, fontWeight: "900", fontSize: 13, marginBottom: 6 },
   crateBtn: {
-    borderRadius: 10,
+    borderRadius: 12,
     paddingVertical: 8,
-    paddingHorizontal: 14,
+    paddingHorizontal: 12,
     alignItems: "center",
     width: "100%",
+    borderWidth: 2,
+    borderColor: OUTLINE,
   },
-  crateBtnText: { fontWeight: "900", fontSize: 12, letterSpacing: 1 },
+  crateBtnText: { fontWeight: "900", fontSize: 12, letterSpacing: 0.5 },
   gridHead: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 },
-  gridInfo: { color: colors.onSurfaceTertiary, fontSize: 13, fontWeight: "700" },
+  gridInfo: { color: colors.onSurfaceTertiary, fontSize: 13, fontWeight: "800" },
   gridCard: {
-    backgroundColor: colors.surfaceSecondary,
+    backgroundColor: colors.surfaceTertiary,
     borderRadius: 20,
-    borderWidth: 1,
-    borderColor: colors.border,
+    borderWidth: 3,
+    borderColor: OUTLINE,
+    borderBottomWidth: 6,
     alignItems: "center",
   },
   slot: {
     position: "absolute",
     borderRadius: 12,
-    backgroundColor: colors.surfaceTertiary,
-    borderWidth: 1,
+    backgroundColor: colors.surfaceSecondary,
+    borderWidth: 2,
     borderColor: colors.border,
   },
-  hint: { color: colors.muted, fontSize: 12, textAlign: "center", marginTop: 10, marginBottom: 6 },
+  hint: { color: colors.muted, fontSize: 12, textAlign: "center", marginTop: 10, marginBottom: 6, fontWeight: "600" },
 }));

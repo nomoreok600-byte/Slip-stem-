@@ -38,8 +38,28 @@ provided by user.
 - AdMob interstitial (paced) + 3 rewarded placements.
 - Portrait, one-handed, device-only save.
 
-## Implemented (2026-06-24)
-- Full playable Run with score/distance/combo/multiplier, meter+boost, crates,
+## Cartoon Redesign + Audio + Daily Challenge (2026-06-25)
+- Full cartoon visual overhaul of every screen (bright warm palette, chunky
+  outlined UI, 3D-lip buttons) in `src/theme.ts` + `src/components/ui.tsx`.
+- AI-generated (Gemini Nano Banana) cartoon backgrounds bundled in
+  `assets/images/game/` (home, splash hero, city/desert/rain) via
+  `scripts/gen_images.py`; registered in `src/assets.ts`.
+- Crisp SVG cartoon vehicles/bike/parts/coin/crate in `src/components/sprites.tsx`
+  (react-native-svg) — replaces the old colored rectangles.
+- Animated cartoon Loading screen (`src/components/loading-screen.tsx`) shown
+  until the device save hydrates.
+- Synthesized CC0 audio (`scripts/gen_audio.py` → `assets/audio/*.wav`): music
+  loop, engine loop, whoosh/coin/crash/boost/merge/click. `src/audio.tsx`
+  SoundProvider with mute toggle (persisted); wired into run + garage + buttons.
+- Coins currency: earned per run + Daily rewards; shown in pills; can instant-open
+  a crate for 100 coins in the Garage.
+- Daily Challenge (`src/components/daily-challenge.tsx` + store): a fresh goal each
+  day (score/distance/crates/runs), progress bar, login streak, Claim reward
+  (tokens + coins + occasional crate). Streak resets if a day is missed.
+- Retested via testing agent (iteration_2): all 4 routes pass, tap-lane fix
+  confirmed, no fatal errors.
+
+## Implemented (2026-06-24)- Full playable Run with score/distance/combo/multiplier, meter+boost, crates,
   3 environments incl. rain slick handling (mitigated by ABS), turbo skill.
 - Swipe AND tap lane controls (tap fix verified), brake, pause.
 - Garage merge grid with drag-and-drop, crate open/rush, grid refresh, export.

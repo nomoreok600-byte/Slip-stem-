@@ -6,7 +6,7 @@
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "slipstream",
-    "userInterfaceStyle": "dark",
+    "userInterfaceStyle": "light",
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.mrbs.Slipstream"
@@ -14,7 +14,7 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
-        "backgroundColor": "#07070C"
+        "backgroundColor": "#FFE7A8"
       },
       "package": "com.mrbs.Slipstream"
     },
@@ -31,7 +31,7 @@
           "image": "./assets/images/splash-image.png",
           "imageWidth": 200,
           "resizeMode": "contain",
-          "backgroundColor": "#07070C"
+          "backgroundColor": "#FFE7A8"
         }
       ],
       "expo-font",
@@ -47,7 +47,8 @@
           "userTrackingUsageDescription": "This identifier is used to deliver more relevant ads."
         }
       ],
-      "expo-sharing"
+      "expo-sharing",
+      "expo-audio"
     ],
     "experiments": {
       "typedRoutes": true

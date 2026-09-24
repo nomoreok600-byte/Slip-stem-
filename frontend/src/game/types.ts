@@ -30,8 +30,22 @@ export type GameState = {
   gridSize: number; // 4 or 5
   crates: Crate[];
   tokens: number;
+  coins: number;
+  daily: Daily;
   upgrades: Upgrades;
   stats: Stats;
+};
+
+export type DailyGoalType = "score" | "distance" | "crates" | "runs";
+
+export type Daily = {
+  dayKey: string; // YYYY-MM-DD the goal belongs to
+  type: DailyGoalType;
+  target: number;
+  progress: number;
+  claimed: boolean;
+  streak: number;
+  lastClaimDay: string | null;
 };
 
 export type RunResult = {

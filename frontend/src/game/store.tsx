@@ -15,17 +15,23 @@ import { CRATE_MAX_MS, CRATE_MIN_MS, HIGHER_TIER_MAX, UPGRADE_COST } from "./con
 import {
   applyDrop,
   canExport,
+  coinsForRun,
   crateParts,
+  dailyRewards,
   deriveModifiers,
   deriveSpec,
   dropParts,
+  emptyCount,
   exportTokens,
   initialState,
   isStuck,
+  makeDaily,
   refreshGrid as refreshGridLogic,
   resetGridForExport,
   resizeGrid,
+  todayKey,
   uid,
+  yesterdayKey,
 } from "./logic";
 import type { GameState, RunResult } from "./types";
 
@@ -33,23 +39,54 @@ const STORAGE_KEY = "slipstream.save.v1";
 
 type Action =
   | { type: "hydrate"; state: GameState }
+  | { type: "ensureDaily" }
+  | { type: "claimDaily" }
   | { type: "recordRun"; result: RunResult }
   | { type: "clearRunsSinceAd" }
   | { type: "openCrate"; crateId: string }
   | { type: "rushCrate"; crateId: string }
+  | { type: "openCrateCoins"; crateId: string; cost: number }
   | { type: "drop"; from: number; to: number }
   | { type: "refreshGrid" }
   | { type: "export" }
   | { type: "buy"; key: "grid5" | "scoreMult" | "handling" | "higherTier" };
+
+const COIN_OPEN_COST = 100;
 
 function reducer(state: GameState, action: Action): GameState {
   switch (action.type) {
     case "hydrate":
       return action.state;
 
+    case "ensureDaily": {
+      const today = todayKey();
+      if (state.daily.dayKey === today) return state;
+      // new day -> fresh goal, keep streak (reset happens at claim time if broken)
+      return { ...state, daily: makeDaily(today, state.daily.streak, state.daily.lastClaimDay) };
+    }
+
+    case "claimDaily": {
+      const d = state.daily;
+      if (d.claimed || d.progress < d.target) return state;
+      const today = todayKey();
+      const continues = d.lastClaimDay === yesterdayKey();
+      const streak = continues ? d.streak + 1 : 1;
+      const reward = dailyRewards(streak);
+      const now = Date.now();
+      const newCrates = reward.crate
+        ? [{ id: uid("crate"), tier: 2, readyAt: now }]
+        : [];
+      return {
+        ...state,
+        tokens: state.tokens + reward.tokens,
+        coins: state.coins + reward.coins,
+        crates: [...state.crates, ...newCrates],
+        daily: { ...d, claimed: true, streak, lastClaimDay: today },
+      };
+    }
+
     case "recordRun": {
       const { result } = action;
-      // add collected crates with random unlock timers
       const now = Date.now();
       const newCrates = [];
       for (let i = 0; i < result.cratesCollected; i++) {
@@ -59,9 +96,21 @@ function reducer(state: GameState, action: Action): GameState {
           readyAt: now + CRATE_MIN_MS + Math.random() * (CRATE_MAX_MS - CRATE_MIN_MS),
         });
       }
+      // daily progress
+      const d = state.daily;
+      let progress = d.progress;
+      if (!d.claimed) {
+        if (d.type === "score") progress = Math.max(progress, result.score);
+        else if (d.type === "distance") progress += result.distance;
+        else if (d.type === "crates") progress += result.cratesCollected;
+        else if (d.type === "runs") progress += 1;
+      }
+      const coinsEarned = coinsForRun(result.distance, result.cratesCollected);
       return {
         ...state,
+        coins: state.coins + coinsEarned,
         crates: [...state.crates, ...newCrates],
+        daily: { ...d, progress },
         stats: {
           ...state.stats,
           bestScore: Math.max(state.stats.bestScore, result.score),
@@ -83,6 +132,21 @@ function reducer(state: GameState, action: Action): GameState {
       const { grid } = dropParts(state.grid, parts);
       return {
         ...state,
+        grid,
+        crates: state.crates.filter((c) => c.id !== action.crateId),
+      };
+    }
+
+    case "openCrateCoins": {
+      const crate = state.crates.find((c) => c.id === action.crateId);
+      if (!crate) return state;
+      if (state.coins < action.cost) return state;
+      if (emptyCount(state.grid) <= 0) return state;
+      const parts = crateParts(crate, state.upgrades);
+      const { grid } = dropParts(state.grid, parts);
+      return {
+        ...state,
+        coins: state.coins - action.cost,
         grid,
         crates: state.crates.filter((c) => c.id !== action.crateId),
       };
@@ -166,7 +230,9 @@ type GameContextValue = {
   ready: boolean;
   recordRun: (result: RunResult) => void;
   clearRunsSinceAd: () => void;
+  claimDaily: () => void;
   openCrate: (crateId: string) => void;
+  openCrateCoins: (crateId: string) => void;
   rushCrate: (crateId: string) => void;
   drop: (from: number, to: number) => void;
   refreshGrid: () => void;
@@ -188,15 +254,25 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       const raw = await storage.getItem<string>(STORAGE_KEY, "");
       if (alive && raw) {
         try {
-          const parsed = JSON.parse(raw) as GameState;
+          const parsed = JSON.parse(raw) as Partial<GameState>;
           if (parsed && Array.isArray(parsed.grid)) {
-            dispatch({ type: "hydrate", state: parsed });
+            const base = initialState();
+            const merged: GameState = {
+              ...base,
+              ...parsed,
+              coins: parsed.coins ?? 0,
+              daily: parsed.daily ?? base.daily,
+              upgrades: { ...base.upgrades, ...(parsed.upgrades ?? {}) },
+              stats: { ...base.stats, ...(parsed.stats ?? {}) },
+            } as GameState;
+            dispatch({ type: "hydrate", state: merged });
           }
         } catch {
           // ignore corrupt save
         }
       }
       hydrated.current = true;
+      dispatch({ type: "ensureDaily" });
       if (alive) setReady(true);
     })();
     return () => {
@@ -216,7 +292,9 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       ready,
       recordRun: (result) => dispatch({ type: "recordRun", result }),
       clearRunsSinceAd: () => dispatch({ type: "clearRunsSinceAd" }),
+      claimDaily: () => dispatch({ type: "claimDaily" }),
       openCrate: (crateId) => dispatch({ type: "openCrate", crateId }),
+      openCrateCoins: (crateId) => dispatch({ type: "openCrateCoins", crateId, cost: COIN_OPEN_COST }),
       rushCrate: (crateId) => dispatch({ type: "rushCrate", crateId }),
       drop: (from, to) => dispatch({ type: "drop", from, to }),
       refreshGrid: () => dispatch({ type: "refreshGrid" }),
@@ -246,4 +324,4 @@ export function useRunModifiers() {
   return useMemo(() => deriveModifiers(state), [state]);
 }
 
-export { canExport, exportTokens, isStuck };
+export { canExport, exportTokens, isStuck, COIN_OPEN_COST };

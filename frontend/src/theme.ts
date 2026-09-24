@@ -1,6 +1,6 @@
 // Design tokens for Slipstream: Merge & Ride.
-// Single fixed dark neon-cyberpunk theme (game look must never flip to light),
-// so all values live under `light` and the scheme is pinned via defaultScheme.
+// Bright, warm CARTOON theme (playful hyper-casual look, chunky UI).
+// Single fixed theme so the look never flips with device dark mode.
 // makeStyles(colors => ...) for StyleSheets; useTheme().colors for color props.
 
 import { useMemo } from "react";
@@ -9,61 +9,68 @@ import { Appearance, StyleSheet, useColorScheme } from "react-native";
 export type ColorScheme = "light" | "dark";
 
 const light = {
-  // Surfaces
-  surface: "#07070C", // primary canvas (near-black)
-  onSurface: "#EAF6FF",
-  surfaceSecondary: "#101020", // cards, panels
-  onSurfaceSecondary: "#C9D6E5",
-  surfaceTertiary: "#181832", // inputs, chips, deep nesting
-  onSurfaceTertiary: "#9AA7C2",
-  surfaceInverse: "#EAF6FF",
-  onSurfaceInverse: "#07070C",
-  muted: "#6B7A99",
+  // Surfaces (warm cream / white cards)
+  surface: "#FFF3D6",
+  onSurface: "#2C2418",
+  surfaceSecondary: "#FFFFFF",
+  onSurfaceSecondary: "#4A3F2C",
+  surfaceTertiary: "#FBE7B8",
+  onSurfaceTertiary: "#7A6A48",
+  surfaceInverse: "#2C2418",
+  onSurfaceInverse: "#FFF6E0",
+  muted: "#A6926A",
 
-  // Brand (cyan / magenta neon)
-  brand: "#00E5FF",
-  onBrand: "#04121A",
-  brandPrimary: "#00E5FF",
-  onBrandPrimary: "#04121A",
-  brandSecondary: "#FF2E97",
-  onBrandSecondary: "#0A0A0F",
-  brandTertiary: "#152233",
-  onBrandTertiary: "#7FE9FF",
+  // Brand
+  brand: "#2F9BE0",
+  onBrand: "#FFFFFF",
+  brandPrimary: "#2F9BE0",
+  onBrandPrimary: "#FFFFFF",
+  brandSecondary: "#FF8A3D",
+  onBrandSecondary: "#FFFFFF",
+  brandTertiary: "#DCF1FF",
+  onBrandTertiary: "#0E5A82",
 
   // Status
-  success: "#39FF9E",
-  onSuccess: "#04120B",
-  warning: "#FFB020",
-  onWarning: "#1A1200",
-  error: "#FF4D6D",
-  onError: "#1A0308",
-  info: "#4CC9F0",
-  onInfo: "#03121A",
+  success: "#7ED957",
+  onSuccess: "#123A00",
+  warning: "#FFC02E",
+  onWarning: "#4A3200",
+  error: "#FF5A5F",
+  onError: "#FFFFFF",
+  info: "#2F9BE0",
+  onInfo: "#FFFFFF",
 
   // Lines
-  border: "#232338",
-  borderStrong: "#33334D",
-  divider: "#1C1C30",
+  border: "#E9D3A0",
+  borderStrong: "#C9A24B",
+  divider: "#F1E2B8",
 
-  // --- Game-specific tokens (fixed, never theme-swapped) ---
-  neonCyan: "#00E5FF",
-  neonMagenta: "#FF2E97",
-  neonPurple: "#B15CFF",
-  neonGold: "#FFD23F",
-  neonGreen: "#39FF9E",
+  // --- Cartoon accent tokens (mapped onto former neon keys for compatibility) ---
+  neonCyan: "#2F9BE0",
+  neonMagenta: "#FF8A3D",
+  neonPurple: "#B06BFF",
+  neonGold: "#FFC02E",
+  neonGreen: "#7ED957",
 
-  engine: "#FF7A29", // engine part family
-  onEngine: "#1A0A00",
-  brake: "#2EE6D6", // braking part family
-  onBrake: "#02120F",
-  aero: "#C77DFF", // aesthetics part family
-  onAero: "#12061F",
+  // Part families
+  engine: "#FF7A3D",
+  onEngine: "#3A1400",
+  brake: "#2F9BE0",
+  onBrake: "#03293E",
+  aero: "#B06BFF",
+  onAero: "#230A40",
 
-  road: "#0B0B14",
-  roadLine: "#2A2A45",
-  crate: "#FFD23F",
-  onCrate: "#1A1200",
-  danger: "#FF3B5C",
+  // Gameplay
+  road: "#7C6B54",
+  roadLine: "#FFF3D6",
+  crate: "#FFC02E",
+  onCrate: "#4A3200",
+  coin: "#FFC02E",
+  onCoin: "#4A3200",
+  danger: "#FF5A5F",
+
+  // Outline used across cartoon art (chunky dark outline)
+  outline: "#3A2E1E",
 };
 
 export type ThemeColors = typeof light;

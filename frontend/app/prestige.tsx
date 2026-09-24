@@ -1,14 +1,17 @@
-import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import React, { useCallback } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { useSound } from "@/src/audio";
 import { useToast } from "@/src/components/toast";
+import { CoinIcon } from "@/src/components/sprites";
 import { GlowCard, SectionTitle, addAlpha } from "@/src/components/ui";
 import { HIGHER_TIER_MAX, UPGRADE_COST } from "@/src/game/constants";
 import { useGame } from "@/src/game/store";
 import { makeStyles, useTheme } from "@/src/theme";
+
+const OUTLINE = "#3A2E1E";
 
 export default function Prestige() {
   const router = useRouter();
@@ -17,6 +20,7 @@ export default function Prestige() {
   const insets = useSafeAreaInsets();
   const { state, buy } = useGame();
   const toast = useToast();
+  const sound = useSound();
   const u = state.upgrades;
 
   const attempt = useCallback(
@@ -30,9 +34,10 @@ export default function Prestige() {
         return;
       }
       buy(key);
+      sound.play("coin");
       toast.show("Upgrade purchased!", "success");
     },
-    [state.tokens, buy, toast],
+    [state.tokens, buy, toast, sound],
   );
 
   const items = [
@@ -80,14 +85,19 @@ export default function Prestige() {
 
   return (
     <View style={styles.container}>
-      <LinearGradient colors={[colors.surface, "#160726", colors.surface]} style={styles.bg} />
       <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
         <Pressable testID="prestige-back-button" onPress={() => router.replace("/")} style={styles.backBtn}>
           <Text style={styles.backText}>‹</Text>
         </Pressable>
         <Text style={styles.headerTitle}>SYNDICATE</Text>
-        <View style={styles.tokenPill}>
-          <Text style={styles.tokenText}>◆ {state.tokens}</Text>
+        <View style={styles.pillRow}>
+          <View style={styles.coinPill}>
+            <CoinIcon size={16} />
+            <Text style={styles.coinText}>{state.coins}</Text>
+          </View>
+          <View style={styles.tokenPill}>
+            <Text style={styles.tokenText}>◆ {state.tokens}</Text>
+          </View>
         </View>
       </View>
 
@@ -165,43 +175,58 @@ function IntroStat({ label, value, colors }: { label: string; value: string; col
 
 const useStyles = makeStyles((colors) => ({
   container: { flex: 1, backgroundColor: colors.surface },
-  bg: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0 },
   header: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 20,
+    paddingHorizontal: 18,
     paddingBottom: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.divider,
+    borderBottomWidth: 3,
+    borderBottomColor: OUTLINE,
   },
   backBtn: {
     width: 44,
     height: 44,
-    borderRadius: 12,
+    borderRadius: 14,
     backgroundColor: colors.surfaceSecondary,
     alignItems: "center",
     justifyContent: "center",
-    borderWidth: 1,
-    borderColor: colors.border,
+    borderWidth: 3,
+    borderColor: OUTLINE,
+    borderBottomWidth: 5,
   },
   backText: { color: colors.onSurface, fontSize: 28, fontWeight: "900", marginTop: -4 },
-  headerTitle: { color: colors.onSurface, fontSize: 22, fontWeight: "900", letterSpacing: 3 },
-  tokenPill: {
-    borderRadius: 20,
-    paddingHorizontal: 14,
-    paddingVertical: 9,
-    backgroundColor: addAlpha(colors.neonGold, 0.16),
-    borderWidth: 1,
-    borderColor: colors.neonGold,
+  headerTitle: { color: colors.onSurface, fontSize: 22, fontWeight: "900", letterSpacing: 2 },
+  pillRow: { flexDirection: "row", gap: 8, alignItems: "center" },
+  coinPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    borderRadius: 16,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    backgroundColor: colors.surfaceSecondary,
+    borderWidth: 3,
+    borderColor: OUTLINE,
+    borderBottomWidth: 5,
   },
-  tokenText: { color: colors.neonGold, fontWeight: "900", fontSize: 14 },
-  introTitle: { color: colors.neonGold, fontSize: 13, fontWeight: "900", letterSpacing: 3, marginBottom: 10 },
-  introText: { color: colors.onSurfaceSecondary, fontSize: 14, lineHeight: 21 },
+  coinText: { color: colors.onSurface, fontWeight: "900", fontSize: 13 },
+  tokenPill: {
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: colors.neonGold,
+    borderWidth: 3,
+    borderColor: OUTLINE,
+    borderBottomWidth: 5,
+  },
+  tokenText: { color: colors.onCrate, fontWeight: "900", fontSize: 14 },
+  introTitle: { color: colors.brandSecondary, fontSize: 13, fontWeight: "900", letterSpacing: 3, marginBottom: 10 },
+  introText: { color: colors.onSurfaceSecondary, fontSize: 14, lineHeight: 21, fontWeight: "600" },
   introStats: {
     flexDirection: "row",
     marginTop: 16,
-    borderTopWidth: 1,
+    borderTopWidth: 2,
     borderTopColor: colors.divider,
     paddingTop: 14,
   },
@@ -211,21 +236,24 @@ const useStyles = makeStyles((colors) => ({
     borderRadius: 18,
     padding: 16,
     marginBottom: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
+    borderWidth: 3,
+    borderColor: OUTLINE,
+    borderBottomWidth: 6,
     overflow: "hidden",
   },
-  upgradeAccent: { width: 4, borderRadius: 4, marginRight: 14 },
+  upgradeAccent: { width: 6, borderRadius: 4, marginRight: 14 },
   upgradeTitleRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   upgradeTitle: { color: colors.onSurface, fontSize: 17, fontWeight: "900", flex: 1 },
   upgradeLevel: { fontSize: 12, fontWeight: "900", marginLeft: 8 },
-  upgradeDesc: { color: colors.onSurfaceTertiary, fontSize: 13, lineHeight: 19, marginTop: 6, marginBottom: 14 },
+  upgradeDesc: { color: colors.onSurfaceTertiary, fontSize: 13, lineHeight: 19, marginTop: 6, marginBottom: 14, fontWeight: "600" },
   buyBtn: {
     alignSelf: "flex-start",
     borderRadius: 12,
-    borderWidth: 1.5,
+    borderWidth: 3,
+    borderColor: OUTLINE,
+    borderBottomWidth: 5,
     paddingHorizontal: 18,
-    paddingVertical: 10,
+    paddingVertical: 8,
   },
   buyText: { fontWeight: "900", fontSize: 15 },
 }));
